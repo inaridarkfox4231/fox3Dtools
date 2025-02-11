@@ -1,1 +1,984 @@
+const fox3Dtools = (function(){
+  const tools = {};
 
+  // ---------------------- Vecta ---------------------- //
+
+  // ベクトル。3次元でいいと思う。必要最低限の機能だけ用意する。
+  class Vecta{
+    constructor(a=0,b=0,c=0){
+      this.x = a;
+      this.y = b;
+      this.z = c;
+    }
+    set(){
+      // 実はこれのimmutable版がcreateだが、
+      // setがcreate的な挙動をするのは気持ち悪いのでやらない。
+      const res = Vecta.validate(...arguments);
+      this.x = res.x; this.y = res.y; this.z = res.z;
+      return this;
+    }
+    copy(){
+      return new Vecta(this.x, this.y, this.z);
+    }
+    show(directConsole = false){
+      // trueの場合は直接コンソールに出す
+      const info = `${this.x}, ${this.y}, ${this.z}`;
+      if(directConsole){
+        console.log(info);
+      }
+      return info;
+    }
+    array(){
+      // 地味にあった方がいいかもしれない
+      return [this.x, this.y, this.z];
+    }
+    add(){
+      const res = Vecta.validate(...arguments);
+      if(res.im){
+        return new Vecta(this.x + res.x, this.y + res.y, this.z + res.z);
+      }
+      this.x += res.x;  this.y += res.y;  this.z += res.z;
+      return this;
+    }
+    sub(){
+      const res = Vecta.validate(...arguments);
+      if(res.im){
+        return new Vecta(this.x - res.x, this.y - res.y, this.z - res.z);
+      }
+      this.x -= res.x;  this.y -= res.y;  this.z -= res.z;
+      return this;
+    }
+    mult(){
+      const res = Vecta.validate(...arguments);
+      if(res.im){
+        return new Vecta(this.x * res.x, this.y * res.y, this.z * res.z);
+      }
+      this.x *= res.x;  this.y *= res.y;  this.z *= res.z;
+      return this;
+    }
+    div(){
+      const res = Vecta.validate(...arguments);
+      // ゼロ割は雑に回避
+      if(Math.abs(res.x) < Number.EPSILON){ res.x = Number.EPSILON; }
+      if(Math.abs(res.y) < Number.EPSILON){ res.y = Number.EPSILON; }
+      if(Math.abs(res.z) < Number.EPSILON){ res.z = Number.EPSILON; }
+
+      if(res.im){
+        return new Vecta(this.x / res.x, this.y / res.y, this.z / res.z);
+      }
+      this.x /= res.x;  this.y /= res.y;  this.z /= res.z;
+      return this;
+    }
+    cross(){
+      const res = Vecta.validate(...arguments);
+      if(res.im){
+        return this.copy().cross(res.x, res.y, res.z, false);
+      }
+      const {x,y,z} = this;
+      this.x = y * res.z - z * res.y;
+      this.y = z * res.x - x * res.z;
+      this.z = x * res.y - y * res.x;
+      return this;
+    }
+    angleBetween(v){
+      // 絶対値
+      // vはベクトル想定。余計な仕様を作りたくない。
+      const crossMag = this.cross(v, true).mag();
+      const dotValue = this.dot(v);
+      const theta = Math.atan2(crossMag, dotValue);
+      return theta;
+    }
+    angleTo(){
+      // axisから見た場合の符号付き角度。axisは成分指定可能（列挙のみ）。
+      // axisがゼロベクトルもしくは未定義の場合は(0,0,1)とする
+      // vはベクトル想定。ベクトルを2つも取るのでvはベクトルでないとさすがに無理。
+      const res = Vecta.validateForAngleTo(...arguments);
+      const sign = Math.sign(this.cross(res.v, true).dot(res.axis));
+      const theta = this.angleBetween(res.v);
+      return (sign < 0 ? sign : 1) * theta;
+    }
+    rotate(){
+      // axisの周りにangleだけ回転。axisは成分指定可能（列挙のみ）
+      // axisがゼロベクトルの場合は(0,0,1)とする
+      // 素直にロドリゲス掛けるだけです。GLSLとか意味不明なこと考えなくていいです。
+      const res = Vecta.validateForScalar(...arguments);
+      if(res.x*res.x + res.y*res.y + res.z*res.z < Number.EPSILON){
+        res.x = 0; res.y = 0; res.z = 0;
+      }
+      if(res.im){
+        return this.copy().rotate(res.x, res.y, res.z, res.s, false);
+      }
+      // res.imがfalseの場合は自分を変化させる
+      const axis = new Vecta(res.x, res.y, res.z);
+      axis.normalize();
+      const C = Math.cos(res.s);
+      const OC = 1-Math.cos(res.s);
+      const S = Math.sin(res.s);
+      const {x, y, z} = axis;
+      const mat = [
+        C + OC*x*x, OC*x*y - S*z, OC*x*z + S*y,
+        OC*x*y + S*z, C + OC*y*y, OC*y*z - S*x,
+        OC*x*z - S*y, OC*y*z + S*x, C + OC*z*z
+      ];
+      const x1 = mat[0]*this.x + mat[1]*this.y + mat[2]*this.z;
+      const y1 = mat[3]*this.x + mat[4]*this.y + mat[5]*this.z;
+      const z1 = mat[6]*this.x + mat[7]*this.y + mat[8]*this.z;
+      this.set(x1, y1, z1);
+      return this;
+    }
+    addScalar(){
+      // 要するにvの定数倍を足すとかそういう処理
+      // かゆいところに手を伸ばすための関数
+      const res = Vecta.validateForScalar(...arguments);
+      if(res.im){
+        return new Vecta(
+          this.x + res.x * res.s, this.y + res.y * res.s, this.z + res.z * res.s
+        );
+      }
+      this.x += res.x * res.s;
+      this.y += res.y * res.s;
+      this.z += res.z * res.s;
+      return this;
+    }
+    lerp(){
+      // 対象と補間割合。割合が0なら自分、1なら相手。
+      const res = Vecta.validateForScalar(...arguments);
+      if(res.im){
+        return this.copy().lerp(res.x, res.y, res.z, res.s, false);
+      }
+      const {x,y,z} = this;
+      this.x = (1-res.s) * x + res.s * res.x;
+      this.y = (1-res.s) * y + res.s * res.y;
+      this.z = (1-res.s) * z + res.s * res.z;
+      return this;
+    }
+    dot(){
+      // 引数は割と自由で。1,2,3とかでもできるようにしましょ。
+      const res = Vecta.validate(...arguments);
+      return this.x * res.x + this.y * res.y + this.z * res.z;
+    }
+    dist(){
+      const res = Vecta.validate(...arguments);
+      return Math.hypot(this.x - res.x, this.y - res.y, this.z - res.z);
+    }
+    mag(){
+      return Math.sqrt(this.magSq());
+    }
+    magSq(){
+      return this.x * this.x + this.y * this.y + this.z * this.z;
+    }
+    normalize(){
+      const m = this.mag();
+      if(m < Number.EPSILON){
+        // ゼロの場合はゼロベクトルにする
+        return new Vecta(0,0,0);
+      }
+      return this.div(m);
+    }
+    static create(){
+      const res = Vecta.validate(...arguments);
+      return new Vecta(res.x, res.y, res.z);
+    }
+    static validate(){
+      // 長さ1,3の場合はfalseを追加
+      const args = [...arguments];
+      if(args.length === 1){
+        return Vecta.validate(args[0], false);
+      } else if(args.length === 3){
+        return Vecta.validate(args[0], args[1], args[2], false);
+      }else if(args.length === 2){
+        // 長さ2の場合はベクトルか数か配列。数の場合は全部一緒。
+        if(args[0] instanceof Vecta){
+          return {x:args[0].x, y:args[0].y, z:args[0].z, im: args[1]};
+        }else if(typeof(args[0]) === 'number'){
+          return {x:args[0], y:args[0], z:args[0], im:args[1]};
+        }else if(Array.isArray(args[0])){
+          return {x:args[0][0], y:args[0][1], z:args[0][2], im:args[1]};
+        }
+      }else if(args.length === 4){
+        // 長さ4の場合は数限定。
+        if(typeof(args[0]) === 'number'){
+          return {x:args[0], y:args[1], z:args[2], im:args[3]};
+        }
+      }
+      return {x:0, y:0, z:0, im:false}
+    }
+    static validateForAngleTo(){
+      const args = [...arguments];
+      if(args.length === 2){
+        // 長さ2の場合は2つ目がベクトルならゼロの場合にそれを回避する
+        if(args[1] instanceof Vecta){
+          if(args[1].magSq() < Number.EPSILON){
+            return {v:args[0], axis:new Vecta(0,0,1)};
+          }
+          return {v:args[0], axis:args[1]};
+        }else if(Array.isArray(args[1])){
+          return Vecta.validateForAngleTo(args[0], new Vecta(args[1][0], args[1][1], args[1][2]));
+        }
+      }else if(args.length === 4){
+        // 長さ4の場合は後半の3つの数でベクトルを作る
+        if(typeof(args[1]) === 'number'){
+          return Vecta.validateForAngleTo(args[0], new Vecta(args[1], args[2], args[3]));
+        }
+      }
+      return {v:args[0], axis:new Vecta(0,0,1)};
+    }
+    static validateForScalar(){
+      // 想定してるのはaxis,angleもしくはvector,scalar
+      const args = [...arguments];
+      // 長さ2,4の場合はfalseを追加
+      if(args.length === 2){
+        return Vecta.validateForScalar(args[0], args[1], false);
+      }else if(args.length === 4){
+        return Vecta.validateForScalar(args[0], args[1], args[2], args[3], false);
+      }else if(args.length === 3){
+        // 長さ3の場合は...ベクトルか配列。
+        if(typeof(args[1]) === 'number'){
+          if(args[0] instanceof Vecta){
+            return {x:args[0].x, y:args[0].y, z:args[0].z, s:args[1], im:args[2]};
+          }else if(Array.isArray(args[0])){
+            return {x:args[0][0], y:args[0][1], z:args[0][2], s:args[1], im:args[2]};
+          }
+        }
+      }else if(args.length === 5){
+        // 長さ5の場合は数でベクトルを作る。
+        if(typeof(args[0]) === 'number' && typeof(args[3]) === 'number'){
+          return {x:args[0], y:args[1], z:args[2], s:args[3], im:args[4]};
+        }
+      }
+      return {x:0, y:0, z:0, s:0, im:false};
+    }
+    static getOrtho(v){
+      // 雑に直交する単位ベクトルを取る。slerpはこれがあると楽。
+      if(v.magSq() < Number.EPSILON){
+        return Vecta.create(0,0,1);
+      }
+      if(v.x > 0){
+        return Vecta.create(v.y, -v.x, 0).normalize();
+      }
+      return Vecta.create(0, v.z, -v.y).normalize();
+    }
+    static random2D(){
+      // ランダムで円周上の単位ベクトルを取る
+      const t = Math.random()*Math.PI*2;
+      return Vecta.create(Math.cos(t), Math.sin(t));
+    }
+    static random3D(){
+      // ランダムで球面上の単位ベクトルを取る
+      const s = Math.acos(1-Math.random()*2);
+      const t = Math.random()*Math.PI*2;
+      return Vecta.create(Math.sin(s)*Math.cos(t), Math.sin(s)*Math.sin(t), Math.cos(s));
+    }
+    static random3Dvariation(axis, angle, directionFunc){
+      // 関数部分以外は一緒なので統一する
+      if(axis.magSq()<Number.EPSILON){
+        axis = new Vecta(0,0,1);
+      }
+      const zVec = axis.copy().normalize();
+      const xVec = Vecta.getOrtho(zVec);
+      const yVec = zVec.cross(xVec, true);
+      const properAngle = Math.max(Math.min(angle, Math.PI), 0);
+
+      const s = directionFunc(Math.random(), properAngle);
+
+      const t = Math.random()*Math.PI*2;
+      return new Vecta().addScalar(zVec, Math.cos(s)).addScalar(xVec, Math.sin(s)*Math.cos(t)).addScalar(yVec, Math.sin(s)*Math.sin(t));
+    }
+    static random3Dinside(axis, angle){
+      // axis方向、angleより内側の球面上からランダムに取得する。
+      const directionFunc = (rdm, properAngle) => {
+        return Math.acos(1-rdm*(1-Math.cos(properAngle)));
+      }
+      return Vecta.random3Dvariation(axis, angle, directionFunc);
+    }
+    static random3Doutside(axis, angle){
+      // axis方向、angleより外側の球面上からランダムに取得する。
+      const directionFunc = (rdm, properAngle) => {
+        return Math.acos(Math.cos(properAngle) - (1+Math.cos(properAngle))*rdm);
+      }
+      return Vecta.random3Dvariation(axis, angle, directionFunc);
+    }
+  }
+
+  // ---------------------- Quarternion ---------------------- //
+
+  // https://qiita.com/inaba_darkfox/items/53230babef4e163ede3d
+  class Quarternion{
+    constructor(w = 1, x = 0, y = 0, z = 0){
+      this.w = w;
+      this.x = x;
+      this.y = y;
+      this.z = z;
+    }
+    set(q){
+      if(arguments.length === 4){
+        this.w = arguments[0];
+        this.x = arguments[1];
+        this.y = arguments[2];
+        this.z = arguments[3];
+        return this;
+      }
+      this.w = q.w;
+      this.x = q.x;
+      this.y = q.y;
+      this.z = q.z;
+      return this;
+    }
+    copy(){
+      return new Quarternion(this.w, this.x, this.y, this.z);
+    }
+    mult(s = 1, immutable = false){
+      if(immutable){
+        return this.copy().mult(s, false);
+      }
+      this.w *= s;
+      this.x *= s;
+      this.y *= s;
+      this.z *= s;
+      return this;
+    }
+    multQ(q, immutable = false){
+      if(immutable){
+        return this.copy().multQ(q, false);
+      }
+      const {w:d, x:a, y:b, z:c} = this;
+      this.w = d * q.w - a * q.x - b * q.y - c * q.z;
+      this.x = d * q.x + a * q.w + b * q.z - c * q.y;
+      this.y = d * q.y + b * q.w + c * q.x - a * q.z;
+      this.z = d * q.z + c * q.w + a * q.y - b * q.x;
+      return this;
+    }
+    conj(immutable = false){
+      if(immutable){
+        return this.copy().conj(false);
+      }
+      this.x *= -1;
+      this.y *= -1;
+      this.z *= -1;
+      return this;
+    }
+    applyV(v){
+      // vに適用する。軸と角度。
+      // 具体的にはq * v * \bar{q} を計算してx,y,zを取るだけ。
+      const q = this.copy();
+      const vq = Quarternion.fromV(v);
+      const qConj = q.conj(true); // ここのqは変えちゃまずいのでtrueです。
+      // qは変えちゃってOK
+      q.multQ(vq).multQ(qConj);
+      return new Vecta(q.x, q.y, q.z);
+    }
+    mag(){
+      return Math.sqrt(this.magSq());
+    }
+    magSq(){
+      return this.x*this.x + this.y*this.y + this.z*this.z + this.w*this.w;
+    }
+    normalize(){
+      const m = this.mag();
+      if(m < Number.EPSILON){
+        // 0の正規化はゼロとする
+        return new Quarternion(0,0,0,0);
+      }
+      return this.mult(1/m);
+    }
+    pow(a){
+      // この関数自体は補助関数なのでimmutableは不要かと思う
+      const m = this.magSq();
+      if(m < Number.EPSILON){
+        // 0のべき乗は0とする
+        return Quarternion(0,0,0,0);
+      }
+      // ここで排除してしまう。
+      if(this.w < 0){
+        this.mult(-1);
+      }
+      const n = Math.sqrt(m);
+      const c = this.w/n;
+      const s = Math.sqrt(m - this.w*this.w)/n;
+      const t = Math.atan2(s, c); // 0～PI/2
+      const multiplier = Math.pow(n, a);
+      if(Math.abs(t) < Number.EPSILON){
+        this.w = (this.w/n)*multiplier;
+        this.x = (this.x/n)*multiplier;
+        this.y = (this.y/n)*multiplier;
+        this.z = (this.z/n)*multiplier;
+        return this;
+      }
+      const ax = (this.x/n)/s;
+      const ay = (this.y/n)/s;
+      const az = (this.z/n)/s;
+      const phi = a*t;
+      this.w = Math.cos(phi)*multiplier;
+      this.x = Math.sin(phi)*ax*multiplier;
+      this.y = Math.sin(phi)*ay*multiplier;
+      this.z = Math.sin(phi)*az*multiplier; // zがyになってたよ。
+      return this;
+    }
+    slerp(q1, ratio, immutable = false){
+      if(immutable){
+        return this.copy.slerp(q1, ratio, false);
+      }
+      // qは要するにq1*(thisの逆元). これを0～1乗して補間するだけ。
+      const m = this.magSq();
+      if(m < Number.EPSILON){
+        // 0との補間は考えられないのでオールゼロでいいと思う. 線形補間とは違うので。
+        // 実数では0の0でない値でのベキはすべてゼロなので妥当な判断。
+        return new Quarternion(0,0,0,0);
+      }
+      const q = q1.multQ(this.conj(true), true).mult(1/m);
+      return q.pow(ratio).multQ(this);
+      // 右乗算の場合。どっちがいいのかは知らない。
+      //const q = this.conj(true).multQ(q1).mult(1/m);
+      //return this.copy().multQ(q.pow(ratio));
+      // これでいいかどうかは知らんです。
+      // 参考：クォータニオンのべき乗、これは単位限定だけどね。なお右乗算。
+      // https://zenn.dev/mebiusbox/books/132b654aa02124/viewer/2966c7
+    }
+    getAxes(){
+      // 単位クォータニオンの場合は3本の軸ベクトルを順繰りに用意する関数になる。
+      // 行列的にはこれらは列ベクトルで、配置的には転置となっている。
+      // クォータニオンに3本の列ベクトルという別の姿があるイメージ。1to1ではないが。
+      const {w,x,y,z} = this;
+      return {
+        x:new Vecta(2*w*w-1 + 2*x*x, 2*(x*y + z*w), 2*(x*z - y*w)),
+        y:new Vecta(2*(x*y - z*w), 2*w*w-1 + 2*y*y, 2*(y*z + x*w)),
+        z:new Vecta(2*(x*z + y*w), 2*(y*z - x*w), 2*w*w-1 + 2*z*z)
+      }
+    }
+    static fromAA(axis, angle){
+      // 軸の指定方法は3種類
+      if(Array.isArray(axis)){
+        axis = new Vecta(axis[0], axis[1], axis[2]);
+      }else if(arguments.length === 4){
+        axis = new Vecta(arguments[0], arguments[1], arguments[2]);
+        angle = arguments[3];
+      }
+      axis.normalize();
+      const q = new Quarternion();
+      q.w = Math.cos(angle/2);
+      const s = Math.sin(angle/2);
+      q.x = axis.x * s;
+      q.y = axis.y * s;
+      q.z = axis.z * s;
+      return q;
+    }
+    static fromV(v){
+      const q = new Quarternion();
+      q.w = 0;
+      q.x = v.x;
+      q.y = v.y;
+      q.z = v.z;
+      return q;
+    }
+    static fromAxes(x, y, z){
+      // 正規直交基底から出す。正規直交基底でないと失敗する。
+      // 3つの引数はすべてベクトル限定とする。列ベクトル。
+      // 参考：https://github.com/mrdoob/three.js/blob/r172/src/math/Quaternion.js#L294
+      const q = new Quarternion();
+      const {x:a, y:d, z:g} = x;
+      const {x:b, y:e, z:h} = y;
+      const {x:c, y:f, z:i} = z;
+      // a  b  c
+      // d  e  f
+      // g  h  i
+      const trace = a + e + i;
+      // 角度がPIに近いと割り算ができないが、
+      // traceが正ならそれは起きえない。
+      if(trace > 0){
+        // ここだけあっちと違う計算だが、意味的に分かりやすいので。
+        q.w = Math.sqrt((trace + 1) / 4);
+        const factor = 0.25/q.w;
+        q.x = (h - f)*factor;
+        q.y = (c - g)*factor;
+        q.z = (d - b)*factor;
+      }else{
+        if(a > e && a > i){
+          // aが最大の場合
+          const s = 2 * Math.sqrt(1 + a - e - i);
+          q.w = (h - f) / s;
+          q.x = 0.25 * s;
+          q.y = (b + d) / s;
+          q.z = (c + g) / s;
+        }else if(e > i){
+          // eが最大の場合
+          const s = 2 * Math.sqrt(1 + e - i - a);
+          q.w = (c - g) / s;
+          q.x = (b + d) / s;
+          q.y = 0.25 * s;
+          q.z = (f + h) / s;
+        }else{
+          // iが最大の場合
+          const s = 2 * Math.sqrt(1 + i - a - e);
+          q.w = (d - b) / s;
+          q.x = (c + g) / s;
+          q.y = (f + h) / s;
+          q.z = 0.25 * s;
+        }
+      }
+      return q;
+    }
+  }
+
+  // ---------------------- MT4 ---------------------- //
+
+  // 4次正方行列。必要最低限の内容。
+  class MT4{
+    constructor(){
+      // 列挙のみ許す。ベクトルや四元数と揃える形。
+      const args = [...arguments];
+      this.m = new Float32Array(16);
+      if(args.length === 0){
+        // 空っぽの場合
+        for(let i=0; i<16; i++){
+          this.m[i] = (i%5===0 ? 1 : 0); // 単位行列
+        }
+      }else if(args.length === 9){
+        // 3x3の場合（単位行列でベースを作って左上だけ上書きする）
+        for(let i=0; i<16; i++){
+          this.m[i] = (i%5===0 ? 1 : 0); // 単位行列
+        }
+        for(let y=0; y<3; y++){
+          for(let x=0; x<3; x++){
+            this.m[4*y+x] = args[3*y+x];
+          }
+        }
+      }else{
+        // 4x4の場合も含めて「その他」
+        for(let i=0; i<16; i++){
+          if(i<args.length){
+            this.m[i] = args[i];
+          }else{
+            this.m[i] = 0;
+          }
+        }
+      }
+    }
+    set(n){
+      if(Array.isArray(n)){
+        if(n.length === 9){
+          // 9の場合は左上の3x3におく
+          for(let i=0; i<16; i++){
+            this.m[i] = (i%5===0 ? 1 : 0); // 単位行列
+          }
+          // 左上だけ上書き
+          for(let y=0; y<3; y++){
+            for(let x=0; x<3; x++){
+              this.m[4*y+x] = n[3*y+x];
+            }
+          }
+        }else{
+          // 0埋めしてるけど基本16想定
+          for(let i=0; i<16; i++){
+            if(i < n.length){ this.m[i] = n[i]; }else{ this.m[i] = 0; }
+          }
+        }
+        return this;
+      }else if(typeof(arguments[0]) === 'number'){
+        // 列挙の場合
+        const args = [...arguments];
+        return this.set(args);
+      }
+      // 最後に、普通に行列の場合
+      for(let i=0; i<16; i++){ this.m[i] = n.m[i]; }
+      return this;
+    }
+    copy(){
+      const m = new MT4();
+      return m.set(this);
+    }
+    show(directConsole = false){
+      // trueの場合は直接コンソールに出す
+      const info = `${this.m[0]}, ${this.m[1]}, ${this.m[2]}, ${this.m[3]}, \n${this.m[4]}, ${this.m[5]}, ${this.m[6]}, ${this.m[7]}, \n${this.m[8]}, ${this.m[9]}, ${this.m[10]}, ${this.m[11]}, \n${this.m[12]}, ${this.m[13]}, ${this.m[14]}, ${this.m[15]}, `;
+      if(directConsole){
+        console.log(info);
+      }
+      return info;
+    }
+    init(){
+      this.set([1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1]);
+      return this;
+    }
+    multV(v, immutable = false){
+      // vは3次元ベクトルでx,y,z成分を持つ
+      if(immutable){
+        // 不変
+        return this.multV(v.copy(), false);
+      }
+      const {x:a, y:b, z:c} = v;
+      v.x = this.m[0]*a + this.m[1]*b + this.m[2]*c + this.m[3];
+      v.y = this.m[4]*a + this.m[5]*b + this.m[6]*c + this.m[7];
+      v.z = this.m[8]*a + this.m[9]*b + this.m[10]*c + this.m[11];
+      return v;
+    }
+    multN(v, immutable = false){
+      // Vの第四成分が0のバージョン。Nとあるのは法線を意識してる。
+      // ライティングとかで使うと思う
+      if(immutable){
+        // 不変
+        return this.multN(v.copy(), false);
+      }
+      const {x:a, y:b, z:c} = v;
+      v.x = this.m[0]*a + this.m[1]*b + this.m[2]*c;
+      v.y = this.m[4]*a + this.m[5]*b + this.m[6]*c;
+      v.z = this.m[8]*a + this.m[9]*b + this.m[10]*c;
+      return v;
+    }
+    multM(n, immutable = false){
+      // nのところには配列も入れられるようにする。ただし長さは16限定とする。
+      if(immutable){
+        // 不変
+        return this.copy().multM(n, false);
+      }
+      const target = (Array.isArray(n) ? n : n.m);
+      const m2 = new Array(16);
+      for(let i=0; i<16; i++){ m2[i] = this.m[i]; }
+      for(let k=0; k<4; k++){
+        for(let i=0; i<4; i++){
+          this.m[4*k+i] = m2[4*k]*target[i] + m2[4*k+1]*target[i+4] + m2[4*k+2]*target[i+8] + m2[4*k+3]*target[i+12];
+        }
+      }
+      return this;
+    }
+    transpose(immutable = false){
+      if(immutable){
+        return this.copy().transpose(false);
+      }
+      let swapper;
+      for(let k=0; k<4; k++){
+        for(let i=k+1; i<4; i++){
+          swapper = this.m[4*k+i];
+          this.m[4*k+i] = this.m[4*i+k];
+          this.m[4*i+k] = swapper;
+        }
+      }
+      return this;
+    }
+    get3x3(){
+      // 3x3部分の行列を取得する。
+      const result = new Float32Array(9);
+      const indices = [0,1,2,4,5,6,8,9,10];
+      for(let i=0; i<9; i++){
+        result[i] = this.m[indices[i]];
+      }
+      return result;
+    }
+    getInverseTranspose3x3(){
+      // 3x3部分の転置行列の逆行列を型付の配列3x3, つまり長さ9で提供する。
+      // modelやview * modelにこれをかますとそういう行列を得る。
+      // なお、こっちではmodelのあとにviewをかますのを「view*model」と表現する
+      // glsl内部と順番が逆だが特に意識することはないだろう。
+
+      const n = new Array(9).fill(0);
+      n[0] = this.m[0]; n[1] = this.m[4]; n[2] = this.m[8];
+      n[3] = this.m[1]; n[4] = this.m[5]; n[5] = this.m[9];
+      n[6] = this.m[2]; n[7] = this.m[6]; n[8] = this.m[10];
+      // nを転置するのは終わってるので逆行列を取って終わり。
+      // n[0] n[1] n[2]  48-57  27-18  15-24
+      // n[3] n[4] n[5]  56-38  08-26  23-05
+      // n[6] n[7] n[8]  37-46  16-07  04-13
+      const result = new Float32Array(9);
+      const det = n[0]*n[4]*n[8] + n[1]*n[5]*n[6] + n[2]*n[3]*n[7] - n[2]*n[4]*n[6] - n[1]*n[3]*n[8] - n[0]*n[5]*n[7];
+      const indices = [4,8,5,7, 2,7,1,8, 1,5,2,4,
+                       5,6,3,8, 0,8,2,6, 2,3,0,5,
+                       3,7,4,6, 1,6,0,7, 0,4,1,3];
+      for(let i=0; i<9; i++){
+        const offset = i*4;
+        const a0 = indices[offset];
+        const a1 = indices[offset+1];
+        const a2 = indices[offset+2];
+        const a3 = indices[offset+3];
+        result[i] = (n[a0] * n[a1] - n[a2] * n[a3]) / det;
+      }
+      return result;
+    }
+    setScale(a, b, c){
+      // 引数が1個なら全部一緒
+      if(arguments.length < 2){
+        b = a; c = a;
+      }
+      this.set([
+        a, 0, 0, 0, b, 0, 0, 0, c
+      ]);
+      return this;
+    }
+    setRotation(axis, angle){
+      // 軸の指定方法は3種類
+      if(Array.isArray(axis)){
+        axis = new Vecta(axis[0], axis[1], axis[2]);
+      }else if(arguments.length === 4){
+        axis = new Vecta(arguments[0], arguments[1], arguments[2]);
+        angle = arguments[3];
+      }
+      axis.normalize();
+      // axisはベクトル。angleは角度。
+      const C = Math.cos(angle);
+      const OC = 1-Math.cos(angle);
+      const S = Math.sin(angle);
+      const {x, y, z} = axis;
+      this.set([
+        C + OC*x*x, OC*x*y - S*z, OC*x*z + S*y,
+        OC*x*y + S*z, C + OC*y*y, OC*y*z - S*x,
+        OC*x*z - S*y, OC*y*z + S*x, C + OC*z*z
+      ]);
+      return this;
+    }
+    setTranslation(a, b, c){
+      this.set([
+        1, 0, 0, a,
+        0, 1, 0, b,
+        0, 0, 1, c,
+        0, 0, 0, 1
+      ]);
+      return this;
+    }
+    setPerseProjection(fov, aspect, near, far){
+      // パース射影行列。
+      const factor = 1/Math.tan(fov/2);
+      this.set([
+        factor/aspect, 0, 0, 0,
+        0, factor, 0, 0,
+        0, 0, (near+far)/(near-far), 2*near*far/(near-far),
+        0, 0, -1, 0
+      ]);
+      return this;
+    }
+    setMatrixFromQuarternion(q){
+      // qのノルムでスケール。
+      // 正規化して回転行列
+      // 順に掛ける
+      // 単位クォータニオン前提でもいいんだけどなんかもったいないので
+      const s = q.mag();
+      if(s < Number.EPSILON){
+        return new MT4();
+      }
+      const qRot = q.copy().mult(1/s);
+      const axes = qRot.getAxes();
+      this.set(
+        axes.x.x, axes.y.x, axes.z.x, 0,
+        axes.x.y, axes.y.y, axes.z.y, 0,
+        axes.x.z, axes.y.z, axes.z.z, 0,
+        0, 0, 0, 1
+      );
+      const scaleMat = MT4.getScale(s);
+      this.multM(scaleMat);
+      return this;
+    }
+    // 引数のバリエーションが豊富でいちいちバリデーション掛けた方が負荷が大きい場合は
+    // immutableをstaticで用意した方がいい。ベクトルとは事情が違う。こっちは関数も
+    // 少ないし。臨機応変ということ。
+    static getScale(){
+      return (new MT4()).setScale(...arguments);
+    }
+    static getRotation(){
+      return (new MT4()).setRotation(...arguments);
+    }
+    static getTranslation(){
+      return (new MT4()).setTranslation(...arguments);
+    }
+    static getPerseProjection(){
+      // パース射影行列。
+      return (new MT4()).setPerseProjection(...arguments);
+    }
+    static getMatrixFromQuarternion(){
+      return (new MT4()).setMatrixFromQuarternion(...arguments);
+    }
+  }
+
+  // ---------------------- QCamera ---------------------- //
+
+  // 射影は考慮しない。ビューのみ。なおデフォルトはyUpとする。上記のクラスを総動員する。
+  class QCamera{
+    constructor(params = {}){
+      const {eye = [0,1,3], center = [0,0,0], north = [0,1,0]} = params;
+      this.eye = (eye instanceof Vecta ? eye : Vecta.create(eye));
+      this.center = (center instanceof Vecta ? center : Vecta.create(center));
+      this.north = (north instanceof Vecta ? north : Vecta.create(north));
+      this.front = new Vecta();
+      this.side = new Vecta();
+      this.up = new Vecta();
+      this.setAxesFromParam();
+      this.q = new Quarternion();
+      this.setQuarternionFromAxes();
+      this.view = new MT4();
+      this.setView();
+      this.states = {};
+      this.saveState("default");
+    }
+    setAxesAndQuarternionFromParam(params = {}){
+      // eye, center, northのうちいくつかを更新
+      const {eye, center, north} = params;
+      if(eye !== undefined){
+        this.eye = (eye instanceof Vecta ? eye : Vecta.create(eye));
+      }
+      if(center !== undefined){
+        this.center = (center instanceof Vecta ? center : Vecta.create(center));
+      }
+      if(north !== undefined){
+        this.north = (north instanceof Vecta ? north : Vecta.create(north));
+      }
+      this.setAxesFromParam();
+      this.setQuarternionFromAxes();
+      this.setView();
+      return this;
+    }
+    getParam(){
+      return {eye:this.eye, center:this.center, north:this.north};
+    }
+    getAxes(){
+      return {x:this.side, y:this.up, z:this.front};
+    }
+    getQuarternion(){
+      return this.q;
+    }
+    setAxesFromParam(){
+      // frontはeyeからcenterを引く
+      this.front.set(this.eye).sub(this.center).normalize();
+      const _side = this.north.cross(this.front, true);
+      this.side.set(_side).normalize();
+      const _up = this.front.cross(this.side, true);
+      this.up.set(_up).normalize();
+      // それぞれz,x,yに当たる
+      return this;
+    }
+    setAxesFromQuarternion(){
+      // 当然だが単位クォータニオンでないと失敗する
+      const axes = this.q.getAxes();
+      this.side.set(axes.x);
+      this.up.set(axes.y);
+      this.front.set(axes.z);
+      return this;
+    }
+    setQuarternionFromAxes(){
+      // 直交行列からクォータニオンを出す例の方法
+      // https://github.com/mrdoob/three.js/blob/r172/src/math/Quaternion.js#L294
+      this.q = Quarternion.fromAxes(this.side, this.up, this.front);
+      return this;
+    }
+    setView(){
+      // front, side, upから行列を作るだけ。
+      // 意味は内積で軸成分を算出するところをイメージすれば分かりやすいかと
+      this.view.set([
+        this.side.x, this.side.y, this.side.z, 0,
+        this.up.x, this.up.y, this.up.z, 0,
+        this.front.x, this.front.y, this.front.z, 0,
+        0, 0, 0, 1
+      ]);
+      this.view.multM([
+        1, 0, 0, -this.eye.x,
+        0, 1, 0, -this.eye.y,
+        0, 0, 1, -this.eye.z,
+        0, 0, 0, 1
+      ]);
+    }
+    getView(){
+      return this.view;
+    }
+    spin(delta){
+      // northの周りにangleだけ、正方向に回転させる。上から見て正。右ねじ。
+      // qをいじり、axesを更新し、eyeを更新し、viewを更新する。
+      const qSpin = Quarternion.fromAA(this.north, delta);
+      // グローバルなので左乗算
+      qSpin.multQ(this.q);
+      this.q.set(qSpin);
+      // ここがバグってたんですが解消しました。めんどくさ...
+      this.setAxesFromQuarternion();
+      const d = this.eye.dist(this.center);
+      this.eye.set(this.center).addScalar(this.front, d);
+      this.setView();
+      return this;
+    }
+    angle(delta){
+      // sideの周りのローカル回転。正方向に回転させる。なのでy→zですか。northと
+      // frontのなす角をthetaとして0とPIにおさまるようにする
+      const theta = Math.abs(this.north.angleBetween(this.front));
+      // で、
+      const updatedAngle = Math.min(Math.max(theta + delta, 0.000001), Math.PI-0.000001);
+      const properDelta = updatedAngle - theta;
+      const qAngle = Quarternion.fromAA(1,0,0,properDelta);
+      // ローカルなので右乗算
+      this.q.multQ(qAngle);
+      this.setAxesFromQuarternion();
+      const d = this.eye.dist(this.center);
+      this.eye.set(this.center).addScalar(this.front, d);
+      this.setView();
+      return this;
+    }
+    lookAt(v){
+      // vはベクトルとする。centerをvに移すだけ。
+      if(arguments.length === 3){
+        v = new Vecta(arguments[0], arguments[1], arguments[2]);
+      }
+      const difference = v.sub(this.center);
+      this.center.add(difference);
+      this.eye.add(difference);
+      this.setView();
+      return this;
+    }
+    saveState(stateName = "default"){
+      const d = this.eye.dist(this.center);
+      // コピー取らないと更新されちゃうよ
+      this.states[stateName] = {
+        eye:this.eye.copy(), center:this.center.copy(),
+        north:this.north.copy(), q:this.q.mult(d, true)
+      };
+      return this;
+    }
+    loadState(stateName = "default"){
+      const {eye, center, north, q} = this.states[stateName];
+      this.q.set(q).normalize();
+      this.setAxesFromQuarternion();
+      this.eye.set(eye);
+      this.center.set(center);
+      this.north.set(north);
+      this.setView();
+      return this;
+    }
+    lerpState(fromStateName, toStateName, amt = 0){
+      // 目と中心を結ぶ線分を動かしてその間の点で軌跡が短いものを取って、
+      // それとqの補間から色々決める。
+      // amtが0と1のときだけloadStateでやる。それ以外の場合、northはupとする。
+      if(amt === 0){
+        this.loadState(fromStateName);
+        return this;
+      }else if(amt === 1){
+        this.loadState(toStateName);
+        return this;
+      }
+      const {eye:fromEye, center:fromCenter, q:fromQ} = this.states[fromStateName];
+      const {eye:toEye, center:toCenter, q:toQ} = this.states[toStateName];
+      const eyeDiff = fromEye.copy().sub(toEye);
+      const diffDiff = fromEye.copy().sub(toEye).sub(fromCenter).add(toCenter);
+      const divider = diffDiff.magSq(); // magSqで書き直し
+      let ratio = 1; // default.
+      // dividerはfromのベクトルとtoのベクトルの差を表すもの
+      // これが小さいならどこを中心にとっても大差ない。
+      if (divider > Number.EPSILON){
+        ratio = eyeDiff.dot(diffDiff) / divider;
+        ratio = Math.max(0, Math.min(ratio, 1));
+      }
+      // これが補間された重心で、このあとでこれとratioと補間されたfrontを使って
+      // eyeとcenterの位置を決める。
+      const lerpedMedium = fromEye.copy().lerp(fromCenter, ratio).lerp(toEye.copy().lerp(toCenter, ratio), amt);
+      // クォータニオンを補間する
+      const lerpedQ = fromQ.slerp(toQ, amt);
+      // ノルムと単位を分ける
+      const lerpedDist = lerpedQ.mag();
+      lerpedQ.mult(1/lerpedDist);
+      this.q.set(lerpedQ);
+      this.setAxesFromQuarternion();
+      // eyeとcenterの更新
+      this.eye.set(this.front).mult(ratio * lerpedDist).add(lerpedMedium);
+      this.center.set(this.front).mult((ratio-1) * lerpedDist).add(lerpedMedium);
+      this.north.set(this.up); // northはupでOK
+      this.setView();
+      return this;
+    }
+  }
+
+  tools.Vecta = Vecta;
+  tools.Quarternion = Quarternion;
+  tools.MT4 = MT4;
+  tools.QCamera = QCamera;
+
+  return tools;
+})();
