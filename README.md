@@ -5,6 +5,10 @@
 ```
 https://inaridarkfox4231.github.io/fox3Dtools/fox3Dtools.js
 ```
+CDNバージョンはこちら：
+```html
+<script src="https://inaridarkfox4231.github.io/fox3Dtools/fox3Dtools.js"></script>
+```
 ## Vecta
 　3次元ベクトルのクラスです。p5で出来そうなことは一通り揃えました。軸周りの回転やちょっと変わったランダム抽出の関数を持っています。
 ## Quarternion
