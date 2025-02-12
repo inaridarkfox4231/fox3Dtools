@@ -588,7 +588,7 @@ const fox3Dtools = (function(){
     }
     show(directConsole = false){
       // trueの場合は直接コンソールに出す
-      const info = `${this.m[0]}, ${this.m[1]}, ${this.m[2]}, ${this.m[3]}, \n${this.m[4]}, ${this.m[5]}, ${this.m[6]}, ${this.m[7]}, \n${this.m[8]}, ${this.m[9]}, ${this.m[10]}, ${this.m[11]}, \n${this.m[12]}, ${this.m[13]}, ${this.m[14]}, ${this.m[15]}, `;
+      const info = `${this.m[0]}, ${this.m[1]}, ${this.m[2]}, ${this.m[3]}, \n${this.m[4]}, ${this.m[5]}, ${this.m[6]}, ${this.m[7]}, \n${this.m[8]}, ${this.m[9]}, ${this.m[10]}, ${this.m[11]}, \n${this.m[12]}, ${this.m[13]}, ${this.m[14]}, ${this.m[15]}`;
       if(directConsole){
         console.log(info);
       }
@@ -691,9 +691,9 @@ const fox3Dtools = (function(){
       }
       return result;
     }
-    setScale(a, b, c){
+    setScale(a=1, b=1, c=1){
       // 引数が1個なら全部一緒
-      if(arguments.length < 2){
+      if(arguments.length === 1){
         b = a; c = a;
       }
       this.set([
@@ -722,7 +722,15 @@ const fox3Dtools = (function(){
       ]);
       return this;
     }
-    setTranslation(a, b, c){
+    setTranslation(a=0, b=0, c=0){
+      // 引数は配列やベクトルも可能とする。
+      if(Array.isArray(a)){
+        this.setTranslation(a[0], a[1], a[2]);
+        return this;
+      }else if(a instanceof Vecta){
+        this.setTranslation(a.x, a.y, a.z);
+        return this;
+      }
       this.set([
         1, 0, 0, a,
         0, 1, 0, b,
