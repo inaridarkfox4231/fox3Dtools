@@ -795,57 +795,53 @@ const fox3Dtools = (function(){
   // ---------------------- QCamera ---------------------- //
 
   // 射影は考慮しない。ビューのみ。なおデフォルトはyUpとする。上記のクラスを総動員する。
+  // north → topに名称変更。これを使ってaxesを構成する。stateはeyeとcenterとノルム付きクォータニオン。理由は補間を楽にやるため。
+  // カメラワークの汎用関数を導入。一般的に扱う。グローバル/ローカル乗算、視点と注視点どっちを固定するかのoption.
+  // vRoidHubのような制限付きorbitControlは手動で構成することにした。またはそういうクラスを作ってもいいかもしれない。ただ自由が欲しい。
   class QCamera{
     constructor(params = {}){
-      const {eye = [0,1,3], center = [0,0,0], north = [0,1,0]} = params;
-      this.eye = (eye instanceof Vecta ? eye : Vecta.create(eye));
-      this.center = (center instanceof Vecta ? center : Vecta.create(center));
-      this.north = (north instanceof Vecta ? north : Vecta.create(north));
+      // paramsではeye, center, topを配列やベクトルで定義する感じ。あとは要らない。
+      this.eye = new Vecta();
+      this.center = new Vecta();
       this.front = new Vecta();
       this.side = new Vecta();
       this.up = new Vecta();
-      this.setAxesFromParam();
       this.q = new Quarternion();
-      this.setQuarternionFromAxes();
       this.view = new MT4();
-      this.setView();
+
+      this.initialize(params);
+
       this.states = {};
       this.saveState("default");
     }
-    setAxesAndQuarternionFromParam(params = {}){
-      // eye, center, northのうちいくつかを更新
-      const {eye, center, north} = params;
-      if(eye !== undefined){
-        this.eye = (eye instanceof Vecta ? eye : Vecta.create(eye));
-      }
-      if(center !== undefined){
-        this.center = (center instanceof Vecta ? center : Vecta.create(center));
-      }
-      if(north !== undefined){
-        this.north = (north instanceof Vecta ? north : Vecta.create(north));
-      }
-      this.setAxesFromParam();
+    initialize(params = {}){
+      // 据え置きは認めないものとする。
+      const {eye = [0,1,3], center = [0,0,0], top = [0,1,0]} = params;
+      this.eye.set(eye);
+      this.center.set(center);
+      const topVector = Vecta.create(top);
+      this.setAxesFromParam(topVector);
       this.setQuarternionFromAxes();
       this.setView();
       return this;
     }
     getParam(){
-      return {eye:this.eye, center:this.center, north:this.north};
+      return {eye:this.eye, center:this.center};
     }
     getAxes(){
-      return {x:this.side, y:this.up, z:this.front};
+      return {side:this.side, up:this.up, front:this.front};
     }
     getQuarternion(){
       return this.q;
     }
-    setAxesFromParam(){
-      // frontはeyeからcenterを引く
+    setAxesFromParam(topVector){
+      // frontはeyeからcenterを引いたのち正規化する
       this.front.set(this.eye).sub(this.center).normalize();
-      const _side = this.north.cross(this.front, true);
-      this.side.set(_side).normalize();
-      const _up = this.front.cross(this.side, true);
-      this.up.set(_up).normalize();
-      // それぞれz,x,yに当たる
+      // 引数のベクトルは「上」を定めるもの。
+      this.side.set(topVector).cross(this.front).normalize(); // これでいいと思う。
+      this.up.set(this.front).cross(this.side); // これでいいですね。
+      // front,side,upがz,x,yに当たる。
+      // crossのnon-immutableも使いどころあるじゃん。
       return this;
     }
     setAxesFromQuarternion(){
@@ -881,63 +877,117 @@ const fox3Dtools = (function(){
     getView(){
       return this.view;
     }
-    spin(delta){
-      // northの周りにangleだけ、正方向に回転させる。上から見て正。右ねじ。
-      // qをいじり、axesを更新し、eyeを更新し、viewを更新する。
-      const qSpin = Quarternion.fromAA(this.north, delta);
-      // グローバルなので左乗算
-      qSpin.multQ(this.q);
-      this.q.set(qSpin);
-      // ここがバグってたんですが解消しました。めんどくさ...
+    cameraWork(params = {}){
+      // qRotは作用子、globalは左乗算（falseで右乗算）、
+      // centerFixedは注視点固定（falseで視点固定）
+      // 網羅はしてないけどとりあえずこんなもんで。
+      const {qRot, global = true, centerFixed = true} = params;
+      const newQ = (global ? qRot.multQ(this.q, true) : this.q.multQ(qRot, true));
+      this.q.set(newQ);
       this.setAxesFromQuarternion();
       const d = this.eye.dist(this.center);
-      this.eye.set(this.center).addScalar(this.front, d);
+      if(centerFixed){
+        this.eye.set(this.center).addScalar(this.front, d);
+      }else{
+        this.center.set(this.eye).addScalar(this.front, -d);
+      }
       this.setView();
       return this;
+    }
+    rotateCenterFixed(){
+      // グローバル軸周り回転（注視点固定）
+      const res = QCamera.validate(...arguments);
+      const qSpin = Quarternion.fromAA(res.v, res.delta);
+      return this.cameraWork({
+        qRot:qSpin, global:true, centerFixed:true
+      });
+    }
+    rotateEyeFixed(){
+      // グローバル軸周り回転（視点固定）
+      const res = QCamera.validate(...arguments);
+      const qSpin = Quarternion.fromAA(res.v, res.delta);
+      return this.cameraWork({
+        qRot:qSpin, global:true, centerFixed:false
+      });
+    }
+    spin(delta){
+      // ローカルのup周りの回転（注視点固定）
+      return this.cameraWork({
+        qRot:Quarternion.fromAA(0,1,0,delta), global:false, centerFixed:true
+      });
+    }
+    pan(delta){
+      // ローカルのup周りの回転（視点固定）
+      return this.cameraWork({
+        qRot:Quarternion.fromAA(0,1,0,delta), global:false, centerFixed:false
+      });
     }
     angle(delta){
-      // sideの周りのローカル回転。正方向に回転させる。なのでy→zですか。northと
-      // frontのなす角をthetaとして0とPIにおさまるようにする
-      const theta = Math.abs(this.north.angleBetween(this.front));
-      // で、
-      const updatedAngle = Math.min(Math.max(theta + delta, 0.000001), Math.PI-0.000001);
-      const properDelta = updatedAngle - theta;
-      const qAngle = Quarternion.fromAA(1,0,0,properDelta);
-      // ローカルなので右乗算
-      this.q.multQ(qAngle);
-      this.setAxesFromQuarternion();
-      const d = this.eye.dist(this.center);
-      this.eye.set(this.center).addScalar(this.front, d);
-      this.setView();
-      return this;
+      // ローカルのside周りの回転（注視点固定）
+      return this.cameraWork({
+        qRot:Quarternion.fromAA(1,0,0,delta), global:false, centerFixed:true
+      });
     }
-    lookAt(v){
-      // vはベクトルとする。centerをvに移すだけ。
-      if(arguments.length === 3){
-        v = new Vecta(arguments[0], arguments[1], arguments[2]);
-      }
-      const difference = v.sub(this.center);
+    tilt(delta){
+      // ローカルのside周りの回転（視点固定）
+      return this.cameraWork({
+        qRot:Quarternion.fromAA(1,0,0,delta), global:false, centerFixed:false
+      });
+    }
+    roll(delta){
+      // ローカルのfront軸周りの回転
+      return this.cameraWork({
+        qRot:Quarternion.fromAA(0,0,1,delta), global:false
+      });
+    }
+    lookAt(){
+      // centerがベクトルに一致するように、eyeとcenterを平行移動する。
+      // 列挙と配列もOKである。
+      const newCenter = QCamera.validate(...arguments).v;
+      // newCenterはベクトル
+      const difference = newCenter.sub(this.center);
       this.center.add(difference);
       this.eye.add(difference);
       this.setView();
       return this;
     }
+    move(){
+      // v.xだけside,v.yだけup,v.zだけfront方向にeyeとcenterを平行移動する。
+      // ベクトルの他、列挙と配列がOKである。
+      const v = QCamera.validate(...arguments).v;
+      // vはベクトル
+      const difference = new Vecta().addScalar(this.side, v.x).addScalar(this.up, v.y).addScalar(this.front, v.z);
+      this.center.add(difference);
+      this.eye.add(difference);
+      this.setView();
+      return this;
+    }
+    zoom(ratio, centerFixed = true){
+      // ratioは正の数。これで割る。距離を。たとえば2倍拡大なら2で割る。
+      // ビューの軸やクォータニオンの変化はありません。
+      const d = this.eye.dist(this.center);
+      if(centerFixed){
+        this.eye.set(this.center).addScalar(this.front, d/ratio);
+      }else{
+        this.center.set(this.eye).addScalar(this.front, -d/ratio);
+      }
+      this.setView();
+      return this;
+    }
     saveState(stateName = "default"){
       const d = this.eye.dist(this.center);
-      // コピー取らないと更新されちゃうよ
+      // eyeとノルム付きクォータニオンで復元できる。コピー取らないと更新されちゃうよ！
       this.states[stateName] = {
-        eye:this.eye.copy(), center:this.center.copy(),
-        north:this.north.copy(), q:this.q.mult(d, true)
+        eye:this.eye.copy(), center:this.center.copy(), q:this.q.mult(d, true)
       };
       return this;
     }
     loadState(stateName = "default"){
-      const {eye, center, north, q} = this.states[stateName];
-      this.q.set(q).normalize();
+      const {eye, center, q} = this.states[stateName];
+      this.q.set(q).normalize(); // 正規化する。
       this.setAxesFromQuarternion();
       this.eye.set(eye);
       this.center.set(center);
-      this.north.set(north);
       this.setView();
       return this;
     }
@@ -977,9 +1027,31 @@ const fox3Dtools = (function(){
       // eyeとcenterの更新
       this.eye.set(this.front).mult(ratio * lerpedDist).add(lerpedMedium);
       this.center.set(this.front).mult((ratio-1) * lerpedDist).add(lerpedMedium);
-      this.north.set(this.up); // northはupでOK
+      // northは廃止されました
       this.setView();
       return this;
+    }
+    static validate(){
+      // ベクトルに関しては数の列挙と配列とベクトルを許す。それと回転角。
+      const args = [...arguments];
+      if(args.length === 1){
+        // 引数の個数が1の場合は0を補う
+        return QCamera.validate(args[0], 0);
+      }else if(args.length === 3){
+        // 引数の個数が3の場合は0を補う
+        return QCamera.validate(args[0], args[1], args[2], 0);
+      }else if(args.length === 4 && typeof(args[0]) === 'number'){
+        // 引数の個数が4の場合は始めの3つでベクトル
+        return {v:new Vecta(args[0], args[1], args[2]), delta:args[3]};
+      }else if(arguments.length === 2){
+        // 引数の個数が2の場合は配列かベクトルからベクトル
+        if(args[0] instanceof Vecta){
+          return {v:args[0], delta:args[1]};
+        }else if(Array.isArray(args[0])){
+          return {v:new Vecta(args[0][0], args[0][1], args[0][2]), delta:args[1]};
+        }
+      }
+      return {v:new Vecta(0,1,0), delta:0};
     }
   }
 
