@@ -318,7 +318,21 @@ const fox3Dtools = (function(){
       this.y = y;
       this.z = z;
     }
-    set(q){
+    set(w, x, y, z){
+      // クォータニオンか配列の場合は列挙の場合に帰着させる
+      const args = [...arguments];
+      if(args[0] instanceof Quarternion){
+        return this.set(args[0].w, args[0].x, args[0].y, args[0].z);
+      }else if(Array.isArray(args[0])){
+        return this.set(args[0][0], args[0][1], args[0][2], args[0][3]);
+      }
+      // 列挙の場合
+      this.w = w;
+      this.x = x;
+      this.y = y;
+      this.z = z;
+      return this;
+      /*
       if(arguments.length === 4){
         this.w = arguments[0];
         this.x = arguments[1];
@@ -330,6 +344,7 @@ const fox3Dtools = (function(){
       this.x = q.x;
       this.y = q.y;
       this.z = q.z;
+      */
       return this;
     }
     copy(){
