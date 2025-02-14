@@ -344,11 +344,117 @@ const fox3Dtools = (function(){
       this.x = q.x;
       this.y = q.y;
       this.z = q.z;
+      return this;
       */
+    }
+    setFromAA(axis, angle){
+      // 軸の指定方法はベクトルが基本だが、配列か列挙でも可
+      if(Array.isArray(axis)){
+        axis = new Vecta(axis[0], axis[1], axis[2]);
+      }else if(arguments.length === 4){
+        axis = new Vecta(arguments[0], arguments[1], arguments[2]);
+        angle = arguments[3];
+      }
+      axis.normalize();
+      //const q = new Quarternion();
+      //q.w = Math.cos(angle/2);
+      const s = Math.sin(angle/2);
+      this.set(Math.cos(angle/2), s*axis.x, s*axis.y, s*axis.z);
+      //q.x = axis.x * s;
+      //q.y = axis.y * s;
+      //q.z = axis.z * s;
+      //return q;
+      return this;
+    }
+    setFromV(v){
+      // ベクトルか配列か列挙。基本はベクトル。
+      if(Array.isArray(v)){
+        v = new Vecta(v[0], v[1], v[2]);
+      }else if(arguments.length === 3){
+        v = new Vecta(arguments[0], arguments[1], arguments[2]);
+      }
+      this.set(0, v.x, v.y, v.z);
+      /*
+      const q = new Quarternion();
+      q.w = 0;
+      q.x = v.x;
+      q.y = v.y;
+      q.z = v.z;
+      return q;
+      */
+      return this;
+    }
+    setFromAxes(x, y, z){
+      // 正規直交基底から出す。正規直交基底でないと失敗する。
+      // 3つの引数はすべてベクトル限定とする。列ベクトル。
+      // 参考：https://github.com/mrdoob/three.js/blob/r172/src/math/Quaternion.js#L294
+      //const q = new Quarternion();
+      const {x:a, y:d, z:g} = x;
+      const {x:b, y:e, z:h} = y;
+      const {x:c, y:f, z:i} = z;
+      // a  b  c
+      // d  e  f
+      // g  h  i
+      const trace = a + e + i;
+      // 角度がPIに近いと割り算ができないが、
+      // traceが正ならそれは起きえない。
+      if(trace > 0){
+        // ここだけあっちと違う計算だが、意味的に分かりやすいので。
+        const w = Math.sqrt((trace + 1) / 4);
+        const factor = 0.25/w;
+        this.set(w, (h - f)*factor, (c - g)*factor, (d - b)*factor)
+        /*
+        q.w = Math.sqrt((trace + 1) / 4);
+        const factor = 0.25/q.w;
+        q.x = (h - f)*factor;
+        q.y = (c - g)*factor;
+        q.z = (d - b)*factor;
+        */
+      }else{
+        if(a > e && a > i){
+          // aが最大の場合
+          const s = 2 * Math.sqrt(1 + a - e - i);
+          this.set((h - f) / s, 0.25 * s, (b + d) / s, (c + g) / s);
+          /*
+          q.w = (h - f) / s;
+          q.x = 0.25 * s;
+          q.y = (b + d) / s;
+          q.z = (c + g) / s;
+          */
+        }else if(e > i){
+          // eが最大の場合
+          const s = 2 * Math.sqrt(1 + e - i - a);
+          this.set((c - g) / s, (b + d) / s, 0.25 * s, (f + h) / s);
+          /*
+          q.w = (c - g) / s;
+          q.x = (b + d) / s;
+          q.y = 0.25 * s;
+          q.z = (f + h) / s;
+          */
+        }else{
+          // iが最大の場合
+          const s = 2 * Math.sqrt(1 + i - a - e);
+          this.set((d - b) / s, (c + g) / s, (f + h) / s, 0.25 * s);
+          /*
+          q.w = (d - b) / s;
+          q.x = (c + g) / s;
+          q.y = (f + h) / s;
+          q.z = 0.25 * s;
+          */
+        }
+      }
       return this;
     }
     copy(){
       return new Quarternion(this.w, this.x, this.y, this.z);
+    }
+    show(directConsole = false){
+      // trueの場合は直接コンソールに出す
+      const info = `${this.w}, ${this.x}, ${this.y}, ${this.z}`;
+      if(directConsole){
+        console.log(info);
+      }
+      return info;
     }
     mult(s = 1, immutable = false){
       if(immutable){
@@ -439,7 +545,8 @@ const fox3Dtools = (function(){
     }
     slerp(q1, ratio, immutable = false){
       if(immutable){
-        return this.copy.slerp(q1, ratio, false);
+        // copy()の「()」を忘れました。unit testではこういうのもチェックするんですが....
+        return this.copy().slerp(q1, ratio, false);
       }
       // qは要するにq1*(thisの逆元). これを0～1乗して補間するだけ。
       const m = this.magSq();
@@ -468,8 +575,10 @@ const fox3Dtools = (function(){
         z:new Vecta(2*(x*z + y*w), 2*(y*z - x*w), 2*w*w-1 + 2*z*z)
       }
     }
-    static getFromAA(axis, angle){
+    static getFromAA(){
       // 軸の指定方法は3種類
+      return (new Quarternion()).setFromAA(...arguments);
+      /*
       if(Array.isArray(axis)){
         axis = new Vecta(axis[0], axis[1], axis[2]);
       }else if(arguments.length === 4){
@@ -484,19 +593,25 @@ const fox3Dtools = (function(){
       q.y = axis.y * s;
       q.z = axis.z * s;
       return q;
+      */
     }
-    static getFromV(v){
+    static getFromV(){
+      return (new Quarternion()).setFromV(...arguments);
+      /*
       const q = new Quarternion();
       q.w = 0;
       q.x = v.x;
       q.y = v.y;
       q.z = v.z;
       return q;
+      */
     }
-    static getFromAxes(x, y, z){
+    static getFromAxes(){
       // 正規直交基底から出す。正規直交基底でないと失敗する。
       // 3つの引数はすべてベクトル限定とする。列ベクトル。
       // 参考：https://github.com/mrdoob/three.js/blob/r172/src/math/Quaternion.js#L294
+      return (new Quarternion()).setFromAxes(...arguments);
+      /*
       const q = new Quarternion();
       const {x:a, y:d, z:g} = x;
       const {x:b, y:e, z:h} = y;
@@ -539,6 +654,7 @@ const fox3Dtools = (function(){
         }
       }
       return q;
+      */
     }
   }
 
@@ -1040,8 +1156,8 @@ const fox3Dtools = (function(){
       // これが補間された重心で、このあとでこれとratioと補間されたfrontを使って
       // eyeとcenterの位置を決める。
       const lerpedMedium = fromEye.copy().lerp(fromCenter, ratio).lerp(toEye.copy().lerp(toCenter, ratio), amt);
-      // クォータニオンを補間する
-      const lerpedQ = fromQ.slerp(toQ, amt);
+      // クォータニオンを補間する（fromQが変化しないようにtrueを指定）
+      const lerpedQ = fromQ.slerp(toQ, amt, true);
       // ノルムと単位を分ける
       const lerpedDist = lerpedQ.mag();
       lerpedQ.mult(1/lerpedDist);
