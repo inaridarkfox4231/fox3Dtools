@@ -286,17 +286,25 @@ const fox3Dtools = (function(){
     }
     static random3Dinside(axis, angle){
       // axis方向、angleより内側の球面上からランダムに取得する。
+      /*
       const directionFunc = (rdm, properAngle) => {
         return Math.acos(1-rdm*(1-Math.cos(properAngle)));
       }
-      return Vecta.random3Dvariation(axis, angle, directionFunc);
+      */
+      return Vecta.random3Dvariation(axis, angle, (rdm, properAngle) => {
+        return Math.acos(1-rdm*(1-Math.cos(properAngle)));
+      });
     }
     static random3Doutside(axis, angle){
       // axis方向、angleより外側の球面上からランダムに取得する。
+      /*
       const directionFunc = (rdm, properAngle) => {
         return Math.acos(Math.cos(properAngle) - (1+Math.cos(properAngle))*rdm);
       }
-      return Vecta.random3Dvariation(axis, angle, directionFunc);
+      */
+      return Vecta.random3Dvariation(axis, angle, (rdm, properAngle) => {
+        return Math.acos(Math.cos(properAngle) - (1+Math.cos(properAngle))*rdm);
+      });
     }
   }
 
@@ -361,7 +369,7 @@ const fox3Dtools = (function(){
       // vに適用する。軸と角度。
       // 具体的にはq * v * \bar{q} を計算してx,y,zを取るだけ。
       const q = this.copy();
-      const vq = Quarternion.fromV(v);
+      const vq = Quarternion.getFromV(v);
       const qConj = q.conj(true); // ここのqは変えちゃまずいのでtrueです。
       // qは変えちゃってOK
       q.multQ(vq).multQ(qConj);
@@ -445,7 +453,7 @@ const fox3Dtools = (function(){
         z:new Vecta(2*(x*z + y*w), 2*(y*z - x*w), 2*w*w-1 + 2*z*z)
       }
     }
-    static fromAA(axis, angle){
+    static getFromAA(axis, angle){
       // 軸の指定方法は3種類
       if(Array.isArray(axis)){
         axis = new Vecta(axis[0], axis[1], axis[2]);
@@ -462,7 +470,7 @@ const fox3Dtools = (function(){
       q.z = axis.z * s;
       return q;
     }
-    static fromV(v){
+    static getFromV(v){
       const q = new Quarternion();
       q.w = 0;
       q.x = v.x;
@@ -470,7 +478,7 @@ const fox3Dtools = (function(){
       q.z = v.z;
       return q;
     }
-    static fromAxes(x, y, z){
+    static getFromAxes(x, y, z){
       // 正規直交基底から出す。正規直交基底でないと失敗する。
       // 3つの引数はすべてベクトル限定とする。列ベクトル。
       // 参考：https://github.com/mrdoob/three.js/blob/r172/src/math/Quaternion.js#L294
@@ -855,7 +863,7 @@ const fox3Dtools = (function(){
     setQuarternionFromAxes(){
       // 直交行列からクォータニオンを出す例の方法
       // https://github.com/mrdoob/three.js/blob/r172/src/math/Quaternion.js#L294
-      this.q = Quarternion.fromAxes(this.side, this.up, this.front);
+      this.q = Quarternion.getFromAxes(this.side, this.up, this.front);
       return this;
     }
     setView(){
@@ -897,7 +905,7 @@ const fox3Dtools = (function(){
     rotateCenterFixed(){
       // グローバル軸周り回転（注視点固定）
       const res = QCamera.validate(...arguments);
-      const qSpin = Quarternion.fromAA(res.v, res.delta);
+      const qSpin = Quarternion.getFromAA(res.v, res.delta);
       return this.cameraWork({
         qRot:qSpin, global:true, centerFixed:true
       });
@@ -905,7 +913,7 @@ const fox3Dtools = (function(){
     rotateEyeFixed(){
       // グローバル軸周り回転（視点固定）
       const res = QCamera.validate(...arguments);
-      const qSpin = Quarternion.fromAA(res.v, res.delta);
+      const qSpin = Quarternion.getFromAA(res.v, res.delta);
       return this.cameraWork({
         qRot:qSpin, global:true, centerFixed:false
       });
@@ -913,31 +921,31 @@ const fox3Dtools = (function(){
     spin(delta){
       // ローカルのup周りの回転（注視点固定）
       return this.cameraWork({
-        qRot:Quarternion.fromAA(0,1,0,delta), global:false, centerFixed:true
+        qRot:Quarternion.getFromAA(0,1,0,delta), global:false, centerFixed:true
       });
     }
     pan(delta){
       // ローカルのup周りの回転（視点固定）
       return this.cameraWork({
-        qRot:Quarternion.fromAA(0,1,0,delta), global:false, centerFixed:false
+        qRot:Quarternion.getFromAA(0,1,0,delta), global:false, centerFixed:false
       });
     }
     angle(delta){
       // ローカルのside周りの回転（注視点固定）
       return this.cameraWork({
-        qRot:Quarternion.fromAA(1,0,0,delta), global:false, centerFixed:true
+        qRot:Quarternion.getFromAA(1,0,0,delta), global:false, centerFixed:true
       });
     }
     tilt(delta){
       // ローカルのside周りの回転（視点固定）
       return this.cameraWork({
-        qRot:Quarternion.fromAA(1,0,0,delta), global:false, centerFixed:false
+        qRot:Quarternion.getFromAA(1,0,0,delta), global:false, centerFixed:false
       });
     }
     roll(delta){
       // ローカルのfront軸周りの回転
       return this.cameraWork({
-        qRot:Quarternion.fromAA(0,0,1,delta), global:false
+        qRot:Quarternion.getFromAA(0,0,1,delta), global:false
       });
     }
     lookAt(){
