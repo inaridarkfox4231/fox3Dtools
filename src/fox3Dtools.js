@@ -1,7 +1,7 @@
 const fox3Dtools = (function(){
   const tools = {};
 
-  // ---------------------- Vecta ---------------------- //
+  // --------------------------------- Vecta --------------------------------- //
 
   // ベクトル。3次元でいいと思う。必要最低限の機能だけ用意する。
   class Vecta{
@@ -11,13 +11,13 @@ const fox3Dtools = (function(){
       this.z = c;
     }
     set(){
-      // 実はこれのimmutable版がcreateだが、
-      // setがcreate的な挙動をするのは気持ち悪いのでやらない。
+      // 列挙、単数、ベクトル、配列が可能。値をセットする。
       const res = Vecta.validate(...arguments);
       this.x = res.x; this.y = res.y; this.z = res.z;
       return this;
     }
     copy(){
+      // 自分のコピーを返す
       return new Vecta(this.x, this.y, this.z);
     }
     show(directConsole = false){
@@ -29,10 +29,11 @@ const fox3Dtools = (function(){
       return info;
     }
     array(){
-      // 地味にあった方がいいかもしれない
+      // 成分を配列形式で返す。
       return [this.x, this.y, this.z];
     }
     add(){
+      // 和を取る
       const res = Vecta.validate(...arguments);
       if(res.im){
         return new Vecta(this.x + res.x, this.y + res.y, this.z + res.z);
@@ -286,29 +287,19 @@ const fox3Dtools = (function(){
     }
     static random3Dinside(axis, angle){
       // axis方向、angleより内側の球面上からランダムに取得する。
-      /*
-      const directionFunc = (rdm, properAngle) => {
-        return Math.acos(1-rdm*(1-Math.cos(properAngle)));
-      }
-      */
       return Vecta.random3Dvariation(axis, angle, (rdm, properAngle) => {
         return Math.acos(1-rdm*(1-Math.cos(properAngle)));
       });
     }
     static random3Doutside(axis, angle){
       // axis方向、angleより外側の球面上からランダムに取得する。
-      /*
-      const directionFunc = (rdm, properAngle) => {
-        return Math.acos(Math.cos(properAngle) - (1+Math.cos(properAngle))*rdm);
-      }
-      */
       return Vecta.random3Dvariation(axis, angle, (rdm, properAngle) => {
         return Math.acos(Math.cos(properAngle) - (1+Math.cos(properAngle))*rdm);
       });
     }
   }
 
-  // ---------------------- Quarternion ---------------------- //
+  // --------------------------------- Quarternion --------------------------------- //
 
   // https://qiita.com/inaba_darkfox/items/53230babef4e163ede3d
   class Quarternion{
@@ -332,20 +323,6 @@ const fox3Dtools = (function(){
       this.y = y;
       this.z = z;
       return this;
-      /*
-      if(arguments.length === 4){
-        this.w = arguments[0];
-        this.x = arguments[1];
-        this.y = arguments[2];
-        this.z = arguments[3];
-        return this;
-      }
-      this.w = q.w;
-      this.x = q.x;
-      this.y = q.y;
-      this.z = q.z;
-      return this;
-      */
     }
     setFromAA(axis, angle){
       // 軸の指定方法はベクトルが基本だが、配列か列挙でも可
@@ -356,14 +333,8 @@ const fox3Dtools = (function(){
         angle = arguments[3];
       }
       axis.normalize();
-      //const q = new Quarternion();
-      //q.w = Math.cos(angle/2);
       const s = Math.sin(angle/2);
       this.set(Math.cos(angle/2), s*axis.x, s*axis.y, s*axis.z);
-      //q.x = axis.x * s;
-      //q.y = axis.y * s;
-      //q.z = axis.z * s;
-      //return q;
       return this;
     }
     setFromV(v){
@@ -374,21 +345,13 @@ const fox3Dtools = (function(){
         v = new Vecta(arguments[0], arguments[1], arguments[2]);
       }
       this.set(0, v.x, v.y, v.z);
-      /*
-      const q = new Quarternion();
-      q.w = 0;
-      q.x = v.x;
-      q.y = v.y;
-      q.z = v.z;
-      return q;
-      */
       return this;
     }
     setFromAxes(x, y, z){
       // 正規直交基底から出す。正規直交基底でないと失敗する。
       // 3つの引数はすべてベクトル限定とする。列ベクトル。
       // 参考：https://github.com/mrdoob/three.js/blob/r172/src/math/Quaternion.js#L294
-      //const q = new Quarternion();
+
       const {x:a, y:d, z:g} = x;
       const {x:b, y:e, z:h} = y;
       const {x:c, y:f, z:i} = z;
@@ -403,44 +366,19 @@ const fox3Dtools = (function(){
         const w = Math.sqrt((trace + 1) / 4);
         const factor = 0.25/w;
         this.set(w, (h - f)*factor, (c - g)*factor, (d - b)*factor)
-        /*
-        q.w = Math.sqrt((trace + 1) / 4);
-        const factor = 0.25/q.w;
-        q.x = (h - f)*factor;
-        q.y = (c - g)*factor;
-        q.z = (d - b)*factor;
-        */
       }else{
         if(a > e && a > i){
           // aが最大の場合
           const s = 2 * Math.sqrt(1 + a - e - i);
           this.set((h - f) / s, 0.25 * s, (b + d) / s, (c + g) / s);
-          /*
-          q.w = (h - f) / s;
-          q.x = 0.25 * s;
-          q.y = (b + d) / s;
-          q.z = (c + g) / s;
-          */
         }else if(e > i){
           // eが最大の場合
           const s = 2 * Math.sqrt(1 + e - i - a);
           this.set((c - g) / s, (b + d) / s, 0.25 * s, (f + h) / s);
-          /*
-          q.w = (c - g) / s;
-          q.x = (b + d) / s;
-          q.y = 0.25 * s;
-          q.z = (f + h) / s;
-          */
         }else{
           // iが最大の場合
           const s = 2 * Math.sqrt(1 + i - a - e);
           this.set((d - b) / s, (c + g) / s, (f + h) / s, 0.25 * s);
-          /*
-          q.w = (d - b) / s;
-          q.x = (c + g) / s;
-          q.y = (f + h) / s;
-          q.z = 0.25 * s;
-          */
         }
       }
       return this;
@@ -456,7 +394,12 @@ const fox3Dtools = (function(){
       }
       return info;
     }
+    array(){
+      // 成分を配列形式で返す
+      return [this.w, this.x, this.y, this.z];
+    }
     mult(s = 1, immutable = false){
+      // 定数倍
       if(immutable){
         return this.copy().mult(s, false);
       }
@@ -467,6 +410,7 @@ const fox3Dtools = (function(){
       return this;
     }
     multQ(q, immutable = false){
+      // クォータニオンの右乗算
       if(immutable){
         return this.copy().multQ(q, false);
       }
@@ -478,6 +422,7 @@ const fox3Dtools = (function(){
       return this;
     }
     conj(immutable = false){
+      // 共役
       if(immutable){
         return this.copy().conj(false);
       }
@@ -487,7 +432,7 @@ const fox3Dtools = (function(){
       return this;
     }
     applyV(v){
-      // vに適用する。軸と角度。
+      // vに適用する。軸と角度。回転演算になる。
       // 具体的にはq * v * \bar{q} を計算してx,y,zを取るだけ。
       const q = this.copy();
       const vq = Quarternion.getFromV(v);
@@ -497,12 +442,15 @@ const fox3Dtools = (function(){
       return new Vecta(q.x, q.y, q.z);
     }
     mag(){
+      // 大きさ
       return Math.sqrt(this.magSq());
     }
     magSq(){
+      // 大きさの二乗
       return this.x*this.x + this.y*this.y + this.z*this.z + this.w*this.w;
     }
     normalize(){
+      // 正規化
       const m = this.mag();
       if(m < Number.EPSILON){
         // 0の正規化はゼロとする
@@ -578,87 +526,19 @@ const fox3Dtools = (function(){
     static getFromAA(){
       // 軸の指定方法は3種類
       return (new Quarternion()).setFromAA(...arguments);
-      /*
-      if(Array.isArray(axis)){
-        axis = new Vecta(axis[0], axis[1], axis[2]);
-      }else if(arguments.length === 4){
-        axis = new Vecta(arguments[0], arguments[1], arguments[2]);
-        angle = arguments[3];
-      }
-      axis.normalize();
-      const q = new Quarternion();
-      q.w = Math.cos(angle/2);
-      const s = Math.sin(angle/2);
-      q.x = axis.x * s;
-      q.y = axis.y * s;
-      q.z = axis.z * s;
-      return q;
-      */
     }
     static getFromV(){
       return (new Quarternion()).setFromV(...arguments);
-      /*
-      const q = new Quarternion();
-      q.w = 0;
-      q.x = v.x;
-      q.y = v.y;
-      q.z = v.z;
-      return q;
-      */
     }
     static getFromAxes(){
       // 正規直交基底から出す。正規直交基底でないと失敗する。
       // 3つの引数はすべてベクトル限定とする。列ベクトル。
       // 参考：https://github.com/mrdoob/three.js/blob/r172/src/math/Quaternion.js#L294
       return (new Quarternion()).setFromAxes(...arguments);
-      /*
-      const q = new Quarternion();
-      const {x:a, y:d, z:g} = x;
-      const {x:b, y:e, z:h} = y;
-      const {x:c, y:f, z:i} = z;
-      // a  b  c
-      // d  e  f
-      // g  h  i
-      const trace = a + e + i;
-      // 角度がPIに近いと割り算ができないが、
-      // traceが正ならそれは起きえない。
-      if(trace > 0){
-        // ここだけあっちと違う計算だが、意味的に分かりやすいので。
-        q.w = Math.sqrt((trace + 1) / 4);
-        const factor = 0.25/q.w;
-        q.x = (h - f)*factor;
-        q.y = (c - g)*factor;
-        q.z = (d - b)*factor;
-      }else{
-        if(a > e && a > i){
-          // aが最大の場合
-          const s = 2 * Math.sqrt(1 + a - e - i);
-          q.w = (h - f) / s;
-          q.x = 0.25 * s;
-          q.y = (b + d) / s;
-          q.z = (c + g) / s;
-        }else if(e > i){
-          // eが最大の場合
-          const s = 2 * Math.sqrt(1 + e - i - a);
-          q.w = (c - g) / s;
-          q.x = (b + d) / s;
-          q.y = 0.25 * s;
-          q.z = (f + h) / s;
-        }else{
-          // iが最大の場合
-          const s = 2 * Math.sqrt(1 + i - a - e);
-          q.w = (d - b) / s;
-          q.x = (c + g) / s;
-          q.y = (f + h) / s;
-          q.z = 0.25 * s;
-        }
-      }
-      return q;
-      */
     }
   }
 
-  // ---------------------- MT4 ---------------------- //
+  // --------------------------------- MT4 --------------------------------- //
 
   // 4次正方行列。必要最低限の内容。
   class MT4{
@@ -733,7 +613,14 @@ const fox3Dtools = (function(){
       }
       return info;
     }
+    array(){
+      // Float32Arrayではなく通常のArray形式で成分配列を返す。一列につなげたりするのに便利かと。Float32はpushとか使えないし。
+      const a = new Array(16);
+      for(let i=0; i<16; i++){ a[i] = this.m[i]; }
+      return a;
+    }
     init(){
+      // 単位行列で初期化
       this.set([1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1]);
       return this;
     }
@@ -931,7 +818,7 @@ const fox3Dtools = (function(){
     }
   }
 
-  // ---------------------- QCamera ---------------------- //
+  // --------------------------------- QCamera --------------------------------- //
 
   // 射影は考慮しない。ビューのみ。なおデフォルトはyUpとする。上記のクラスを総動員する。
   // north → topに名称変更。これを使ってaxesを構成する。stateはeyeとcenterとノルム付きクォータニオン。理由は補間を楽にやるため。
@@ -1036,17 +923,17 @@ const fox3Dtools = (function(){
     rotateCenterFixed(){
       // グローバル軸周り回転（注視点固定）
       const res = QCamera.validate(...arguments);
-      const qSpin = Quarternion.getFromAA(res.v, res.delta);
+      const qRot = Quarternion.getFromAA(res.v, res.delta);
       return this.cameraWork({
-        qRot:qSpin, global:true, centerFixed:true
+        qRot:qRot, global:true, centerFixed:true
       });
     }
     rotateEyeFixed(){
       // グローバル軸周り回転（視点固定）
       const res = QCamera.validate(...arguments);
-      const qSpin = Quarternion.getFromAA(res.v, res.delta);
+      const qRot = Quarternion.getFromAA(res.v, res.delta);
       return this.cameraWork({
-        qRot:qSpin, global:true, centerFixed:false
+        qRot:qRot, global:true, centerFixed:false
       });
     }
     spin(delta){
@@ -1133,7 +1020,7 @@ const fox3Dtools = (function(){
     lerpState(fromStateName, toStateName, amt = 0){
       // 目と中心を結ぶ線分を動かしてその間の点で軌跡が短いものを取って、
       // それとqの補間から色々決める。
-      // amtが0と1のときだけloadStateでやる。それ以外の場合、northはupとする。
+      // amtが0と1のときだけloadStateでやる。
       if(amt === 0){
         this.loadState(fromStateName);
         return this;
