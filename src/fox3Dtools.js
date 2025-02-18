@@ -421,15 +421,29 @@ const fox3Dtools = (function(){
       this.z = d * q.z + c * q.w + a * q.y - b * q.x;
       return this;
     }
-    rotate(){
-      // VectaのvalidateForScalar使う。切り売り出来なくなるけどそもそもVecta前提だから問題ない。
+    localRotate(){
+      // VectaのvalidateForScalar使う。
+      // 切り売り出来なくなるけどそもそもVecta前提だから問題ない。右乗算。
       const res = Vecta.validateForScalar(...arguments); // x,y,z,s,im
       if(res.im){
-        return this.copy().rotate(res.x, res.y, res.z, res.s);
+        return this.copy().localRotate(res.x, res.y, res.z, res.s);
       }
       // 以下はデフォルト。
       const aa = Quarternion.getFromAA(res.x, res.y, res.z, res.s);
       return this.multQ(aa);
+    }
+    globalRotate(){
+      // VectaのvalidateForScalar使う。
+      // 切り売り出来なくなるけどそもそもVecta前提だから問題ない。左乗算。
+      const res = Vecta.validateForScalar(...arguments); // x,y,z,s,im
+      if(res.im){
+        return this.copy().globalRotate(res.x, res.y, res.z, res.s);
+      }
+      // 以下はデフォルト。
+      const aa = Quarternion.getFromAA(res.x, res.y, res.z, res.s);
+      // aaに自分を右から掛けてそれを自分とする形
+      aa.multQ(this);
+      return this.set(aa);
     }
     conj(immutable = false){
       // 共役
