@@ -421,6 +421,16 @@ const fox3Dtools = (function(){
       this.z = d * q.z + c * q.w + a * q.y - b * q.x;
       return this;
     }
+    rotate(){
+      // VectaのvalidateForScalar使う。切り売り出来なくなるけどそもそもVecta前提だから問題ない。
+      const res = Vecta.validateForScalar(...arguments); // x,y,z,s,im
+      if(res.im){
+        return this.copy().rotate(res.x, res.y, res.z, res.s);
+      }
+      // 以下はデフォルト。
+      const aa = Quarternion.getFromAA(res.x, res.y, res.z, res.s);
+      return this.multQ(aa);
+    }
     conj(immutable = false){
       // 共役
       if(immutable){
