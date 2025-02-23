@@ -20,9 +20,13 @@ const fox3Dtools = (function(){
       // 自分のコピーを返す
       return new Vecta(this.x, this.y, this.z);
     }
-    show(directConsole = false){
+    show(directConsole = false, threshold = 0){
+      // 閾値でチェックして絶対値がそれ未満であれば0とする
+      const properX = (Math.abs(this.x) < threshold ? 0 : this.x);
+      const properY = (Math.abs(this.y) < threshold ? 0 : this.y);
+      const properZ = (Math.abs(this.z) < threshold ? 0 : this.z);
       // trueの場合は直接コンソールに出す
-      const info = `${this.x}, ${this.y}, ${this.z}`;
+      const info = `${properX}, ${properY}, ${properZ}`;
       if(directConsole){
         console.log(info);
       }
@@ -297,6 +301,19 @@ const fox3Dtools = (function(){
         return Math.acos(Math.cos(properAngle) - (1+Math.cos(properAngle))*rdm);
       });
     }
+    static assert(v, w, threshold = 0){
+      // v,wはベクトルもしくは長さ3の配列とする。比較してtrue/falseを返す。
+      // 閾値で緩和する。
+      const vA = (v instanceof Vecta ? v.array() : v);
+      const wA = (w instanceof Vecta ? w.array() : w);
+      for(let i=0; i<3; i++){
+        if(Math.abs(vA[i] - wA[i]) > threshold){
+          console.log(`${i}: ${vA[i]}, ${wA[i]}`);
+          return false;
+        }
+      }
+      return true;
+    }
   }
 
   // --------------------------------- Quarternion --------------------------------- //
@@ -386,9 +403,14 @@ const fox3Dtools = (function(){
     copy(){
       return new Quarternion(this.w, this.x, this.y, this.z);
     }
-    show(directConsole = false){
+    show(directConsole = false, threshold = 0){
+      // 閾値でチェックして絶対値がそれ未満であれば0とする
+      const properW = (Math.abs(this.w) < threshold ? 0 : this.w);
+      const properX = (Math.abs(this.x) < threshold ? 0 : this.x);
+      const properY = (Math.abs(this.y) < threshold ? 0 : this.y);
+      const properZ = (Math.abs(this.z) < threshold ? 0 : this.z);
       // trueの場合は直接コンソールに出す
-      const info = `${this.w}, ${this.x}, ${this.y}, ${this.z}`;
+      const info = `${properW}, ${properX}, ${properY}, ${properZ}`;
       if(directConsole){
         console.log(info);
       }
@@ -560,6 +582,19 @@ const fox3Dtools = (function(){
       // 参考：https://github.com/mrdoob/three.js/blob/r172/src/math/Quaternion.js#L294
       return (new Quarternion()).setFromAxes(...arguments);
     }
+    static assert(p, q, threshold = 0){
+      // p,qはクォータニオンもしくは長さ4の配列とする。比較してtrue/falseを返す。
+      // 閾値で緩和する。
+      const pA = (p instanceof Quarternion ? p.array() : p);
+      const qA = (q instanceof Quarternion ? q.array() : q);
+      for(let i=0; i<4; i++){
+        if(Math.abs(pA[i] - qA[i]) > threshold){
+          console.log(`${i}: ${pA[i]}, ${qA[i]}`);
+          return false;
+        }
+      }
+      return true;
+    }
   }
 
   // --------------------------------- MT4 --------------------------------- //
@@ -629,9 +664,14 @@ const fox3Dtools = (function(){
       const m = new MT4();
       return m.set(this);
     }
-    show(directConsole = false){
+    show(directConsole = false, threshold = 0){
+      // 閾値でチェックして絶対値がそれ未満であれば0とする
+      const showValues = [];
+      for(let i=0; i<16; i++){
+        showValues.push(Math.abs(this.m[i]) < threshold ? 0 : this.m[i]);
+      }
       // trueの場合は直接コンソールに出す
-      const info = `${this.m[0]}, ${this.m[1]}, ${this.m[2]}, ${this.m[3]}, \n${this.m[4]}, ${this.m[5]}, ${this.m[6]}, ${this.m[7]}, \n${this.m[8]}, ${this.m[9]}, ${this.m[10]}, ${this.m[11]}, \n${this.m[12]}, ${this.m[13]}, ${this.m[14]}, ${this.m[15]}`;
+      const info = `${showValues[0]}, ${showValues[1]}, ${showValues[2]}, ${showValues[3]}, \n${showValues[4]}, ${showValues[5]}, ${showValues[6]}, ${showValues[7]}, \n${showValues[8]}, ${showValues[9]}, ${showValues[10]}, ${showValues[11]}, \n${showValues[12]}, ${showValues[13]}, ${showValues[14]}, ${showValues[15]}`;
       if(directConsole){
         console.log(info);
       }
@@ -646,6 +686,28 @@ const fox3Dtools = (function(){
     init(){
       // 単位行列で初期化
       this.set([1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1]);
+      return this;
+    }
+    add(n, immutable = false){
+      // 和
+      if(immutable){
+        return this.copy().add(n, false);
+      }
+      const target = (Array.isArray(n) ? n : n.m);
+      for(let i=0; i<16; i++){
+        this.m[i] += target[i];
+      }
+      return this;
+    }
+    sub(n, immutable = false){
+      // 差
+      if(immutable){
+        return this.copy().sub(n, false);
+      }
+      const target = (Array.isArray(n) ? n : n.m);
+      for(let i=0; i<16; i++){
+        this.m[i] -= target[i];
+      }
       return this;
     }
     multV(v, immutable = false){
@@ -741,6 +803,23 @@ const fox3Dtools = (function(){
       }
       return result;
     }
+    invert(immutable = false){
+      // 4x4の逆行列
+      if(immutable){
+        return this.copy().invert(false);
+      }
+      // ここで計算
+      const cofactors = [];
+      for(let i=0; i<16; i++){
+        cofactors.push(MT4.getCofactor(this, i));
+      }
+      const determinantValue = cofactors[0]*this.m[0]+cofactors[1]*this.m[1]+cofactors[2]*this.m[2]+cofactors[3]*this.m[3];
+      for(let i=0; i<16; i++){
+        this.m[i] = cofactors[i]/determinantValue;
+      }
+      this.transpose(false);
+      return this;
+    }
     setScale(a=1, b=1, c=1){
       // 引数が1個なら全部一緒
       if(arguments.length === 1){
@@ -800,6 +879,16 @@ const fox3Dtools = (function(){
       ]);
       return this;
     }
+    setOrthoProjection(_width, _height, near, far){
+      // 平行投影射影行列
+      this.set([
+        2/_width, 0, 0, 0,
+        0, 2/_height, 0, 0,
+        0, 0, -2/(far-near), -(far+near)/(far-near),
+        0, 0, 0, 1
+      ]);
+      return this;
+    }
     setMatrixFromQuarternion(q){
       // qのノルムでスケール。
       // 正規化して回転行列
@@ -837,8 +926,43 @@ const fox3Dtools = (function(){
       // パース射影行列。
       return (new MT4()).setPerseProjection(...arguments);
     }
+    static getOrthoProjection(){
+      // 平行投影射影行列。
+      return (new MT4()).setOrthoProjection(...arguments);
+    }
     static getMatrixFromQuarternion(){
       return (new MT4()).setMatrixFromQuarternion(...arguments);
+    }
+    static getCofactor(m, c = 0){
+      // mの余因子を取得する関数
+      // たとえばc=1の場合、左上から右に1,下に0のところでクロスで切断して
+      // 符号は-1となりますね
+      m = (m instanceof MT4 ? m.m : m);
+      // mは16配列
+      const a=c%4;
+      const b=(c/4)|0;
+      // 例：a=2,b=1の場合は2+4でpivotは6です
+      // a=1,b=3の場合は4*3+1=13がpivotです～
+      const detSign = 1-2*((a+b)&1);
+      const u=[];
+      for(let i=0;i<16;i++){
+        if((i%4)===a || ((i/4)|0)===b)continue;
+        u.push(m[i]);
+      }
+      return (u[0]*u[4]*u[8] + u[1]*u[5]*u[6] + u[2]*u[3]*u[7] - u[0]*u[5]*u[7] - u[1]*u[3]*u[8] - u[2]*u[4]*u[6])*detSign;
+    }
+    static assert(m, n, threshold = 0){
+      // mとnはMT4もしくは長さ16の配列とする。比較してtrue/falseを返す。
+      // 閾値で緩和する。
+      const mA = (m instanceof MT4 ? m.array() : m);
+      const nA = (n instanceof MT4 ? n.array() : n);
+      for(let i=0; i<4; i++){
+        if(Math.abs(mA[i] - nA[i]) > threshold){
+          console.log(`${i}: ${mA[i]}, ${nA[i]}`);
+          return false;
+        }
+      }
+      return true;
     }
   }
 
@@ -848,6 +972,12 @@ const fox3Dtools = (function(){
   // north → topに名称変更。これを使ってaxesを構成する。stateはeyeとcenterとノルム付きクォータニオン。理由は補間を楽にやるため。
   // カメラワークの汎用関数を導入。一般的に扱う。グローバル/ローカル乗算、視点と注視点どっちを固定するかのoption.
   // vRoidHubのような制限付きorbitControlは手動で構成することにした。またはそういうクラスを作ってもいいかもしれない。ただ自由が欲しい。
+
+  // 射影行列は必要だということになった
+  // ただしstateには含めず独立させる
+  // 逆行列をセットで保持する
+  // 取得するとき両方取得できるようにしておく
+  // あとスクリーン座標関連のメソッドを充実させる感じで
   class QCamera{
     constructor(params = {}){
       // paramsではeye, center, topを配列やベクトルで定義する感じ。あとは要らない。
@@ -861,18 +991,36 @@ const fox3Dtools = (function(){
 
       this.initialize(params);
 
+      // projは別に設定する
+      this.proj = new MT4();
+      this.invProj = new MT4();
+
       this.states = {};
       this.saveState("default");
     }
     initialize(params = {}){
       // 据え置きは認めないものとする。
-      const {eye = [0,1,3], center = [0,0,0], top = [0,1,0]} = params;
+      // proj要らないや。やめよ。setProjに一任する。
+      const {
+        eye = [0,1,3], center = [0,0,0], top = [0,1,0]
+      } = params;
       this.eye.set(eye);
       this.center.set(center);
       const topVector = Vecta.create(top);
       this.setAxesFromParam(topVector);
       this.setQuarternionFromAxes();
       this.setView();
+      // fovとかパラメータで設定できるようにもする。継承で。
+      return this;
+    }
+    setViewParam(params = {}){
+      // 据え置きが無いとどう考えても不便なので用意します。
+      // viewだけ。projは別にいい。setProjで遊ぶんで。topは保持できないんでご了承。
+      const {
+        eye = this.eye, center = this.center, top = [0,1,0]
+      } = params;
+      // 改変したうえでぶちこむ。
+      this.initialize({eye, center, top});
       return this;
     }
     getParam(){
@@ -926,6 +1074,20 @@ const fox3Dtools = (function(){
     }
     getView(){
       return this.view;
+    }
+    setProj(params = {}){
+      // projという形で射影行列かそのソースが与えられているならそれをセットする。
+      // そういう形式にする。継承では別の形を取る。
+      const {proj} = params;
+      if(proj !== undefined && (Array.isArray(proj) || proj instanceof MT4)){
+        this.proj.set(proj);
+        this.invProj.set(this.proj.invert(true));
+      }
+      return this;
+    }
+    getProj(invert = false){
+      if(invert){ return this.invProj; }
+      return this.proj;
     }
     cameraWork(params = {}){
       // qRotは作用子、globalは左乗算（falseで右乗算）、
@@ -1081,6 +1243,40 @@ const fox3Dtools = (function(){
       this.setView();
       return this;
     }
+    getNDCFromGlobal(v){
+      // global点からNDCを計算するだけ。view, proj.
+      // 引数はとりあえずベクトル限定でいいかと。
+      const u = this.view.multV(v, true);
+      const p = this.proj.m;
+      const divider = p[12]*u.x + p[13]*u.y + p[14]*u.z + p[15];
+      this.proj.multV(u);
+      u.div(divider);
+      // u.x, u.yがNDCで、u.zは-1～1の深度値。0.5倍して0.5を足すと正式な深度値
+      // になる。0が最も近くで、1が最も遠い。
+      return u;
+    }
+    getGlobalFromNDC(x1, y1, v){
+      // x1,y1はNDCで、この点をNDCとするグローバル点のうち、vと同じview-zを持つ
+      // ものを返す。まずvのview-zを取得する。次いで、目的のviewベクトルのうち
+      // zと1は分かっているので、それを解とするinvProj係数の方程式を作ることで
+      // 深度値と除数を算出。それらよりviewベクトルを作り、最終的にglobalまで
+      // もっていく。
+      // この式でいいかどうかは知らんです。式いじってたらこうなった。
+      const ip = this.invProj.m;
+      const z = this.view.multV(v, true).z;
+      const a = ip[8]*x1 + ip[9]*y1 + ip[11];
+      const b = ip[10];
+      const c = ip[12]*x1 + ip[13]*y1 + ip[15];
+      const d = ip[14];
+      const z1 = (a-c*z)/(d*z-b);
+      const w = (d*z-b)/(a*d-b*c);
+      const x = w*(ip[0]*x1 + ip[1]*y1 + ip[2]*z1 + ip[3]);
+      const y = w*(ip[4]*x1 + ip[5]*y1 + ip[6]*z1 + ip[7]);
+      // 最終的にglobalまでもっていく
+      const result = this.eye.copy().addScalar(this.side, x).addScalar(this.up, y).addScalar(this.front, z);
+      // できたかも。
+      return result;
+    }
     static validate(){
       // ベクトルに関しては数の列挙と配列とベクトルを許す。それと回転角。
       const args = [...arguments];
@@ -1105,10 +1301,62 @@ const fox3Dtools = (function(){
     }
   }
 
+  // perseの射影を生成時に用意できる便利版
+  class QCameraPerse extends QCamera{
+    constructor(params = {}){
+      super(params);
+      this.fov = 1;
+      this.aspect = 1;
+      this.near = 0.1;
+      this.far = 10;
+      this.setProj(params);
+    }
+    setProj(params = {}){
+      const {
+        fov = this.fov, aspect = this.aspect,
+        near = this.near, far = this.far
+      } = params;
+      this.fov = fov;
+      this.aspect = aspect;
+      this.near = near;
+      this.far = far;
+      this.proj.setPerseProjection(fov, aspect, near, far);
+      this.invProj.set(this.proj.invert(true));
+      return this;
+    }
+  }
+
+  // orthoの射影を生成時に用意できる便利版
+  class QCameraOrtho extends QCamera{
+    constructor(params = {}){
+      super(params);
+      this.width = 4;
+      this.height = 4;
+      this.near = 0.1;
+      this.far = 10;
+      this.setProj(params);
+    }
+    setProj(params = {}){
+      const {
+        width:w = this.width, height:h = this.height,
+        near = this.near, far = this.far
+      } = params;
+      this.width = w;
+      this.height = h;
+      this.near = near;
+      this.far = far;
+      this.proj.setOrthoProjection(w, h, near, far);
+      this.invProj.set(this.proj.invert(true));
+      return this;
+    }
+  }
+
   tools.Vecta = Vecta;
   tools.Quarternion = Quarternion;
   tools.MT4 = MT4;
   tools.QCamera = QCamera;
+  tools.QCameraPerse = QCameraPerse;
+  tools.QCameraOrtho = QCameraOrtho;
 
   return tools;
 })();
