@@ -1,5 +1,162 @@
 // ------------------------------------------------------------------------------------------------------------------------------------------ //
 
+const webglUtils = (function(){
+  const utils = {};
+
+  function createShaderProgram(gl, params = {}){
+
+    // nameを付けることでどのshaderがやばいか識別するとかできると良いかと
+    const {vs, fs, name = "", layout = {}, outVaryings = [], separate = true} = params;
+
+    const vsShader = gl.createShader(gl.VERTEX_SHADER);
+    gl.shaderSource(vsShader, vs);
+    gl.compileShader(vsShader);
+
+    if(!gl.getShaderParameter(vsShader, gl.COMPILE_STATUS)){
+      console.log(`${name}:vertex shaderの作成に失敗しました。`);
+      console.error(gl.getShaderInfoLog(vsShader));
+      return null;
+    }
+
+    const fsShader = gl.createShader(gl.FRAGMENT_SHADER);
+    gl.shaderSource(fsShader, fs);
+    gl.compileShader(fsShader);
+
+    if(!gl.getShaderParameter(fsShader, gl.COMPILE_STATUS)){
+      console.log(`${name}:fragment shaderの作成に失敗しました。`);
+      console.error(gl.getShaderInfoLog(fsShader));
+      return null;
+    }
+
+    const program = gl.createProgram();
+
+    gl.attachShader(program, vsShader);
+    gl.attachShader(program, fsShader);
+
+    // レイアウト指定はアタッチしてからリンクするまでにやらないと機能しない。
+    // なおこの機能はwebgl1でも使うことができる。webgl2で実装されたというのは誤解。
+    setAttributeLayout(gl, program, layout);
+
+    setOutVaryings(gl, program, outVaryings, separate);
+
+    gl.linkProgram(program);
+
+    if(!gl.getProgramParameter(program, gl.LINK_STATUS)){
+      console.log(`${name}:programのlinkに失敗しました。`);
+      console.error(gl.getProgramInfoLog(program));
+      return null;
+    }
+
+    // uniform情報を作成時に登録してしまおう
+    program.uniforms = getActiveUniforms(gl, program);
+    // attribute情報も登録してしまおう。
+    program.attributes = getActiveAttributes(gl, program);
+
+    return program;
+  }
+
+  // レイアウトの指定。各attributeを配列のどれで使うか決める。
+  // 指定しない場合はデフォルト値が使われる。基本的には通しで0,1,2,...と付く。
+  function setAttributeLayout(gl, pg, layout = {}){
+    const names = Object.keys(layout);
+    if(names.length === 0) return;
+
+    for(const name of names){
+      const index = layout[name];
+      gl.bindAttribLocation(pg, index, name);
+    }
+  }
+
+  // TFF用の設定箇所
+  function setOutVaryings(gl, pg, outVaryings = [], separate = true){
+    if(outVaryings.length === 0) return;
+    gl.transformFeedbackVaryings(pg, outVaryings, (separate ? gl.SEPARATE_ATTRIBS : gl.INTERLEAVED_ATTRIBS));
+  }
+
+  function getActiveUniforms(gl, pg){
+    const uniforms = {};
+
+    // active uniformの個数を取得。
+    const numActiveUniforms = gl.getProgramParameter(pg, gl.ACTIVE_UNIFORMS);
+    console.log(`active uniformの個数は${numActiveUniforms}個です`);
+
+    for(let i=0; i<numActiveUniforms; i++){
+      const uniform = gl.getActiveUniform(pg, i);
+      const location = gl.getUniformLocation(pg, uniform.name);
+
+      uniform.location = location;
+      uniforms[uniform.name] = uniform;
+    }
+    return uniforms;
+  }
+
+  function getActiveAttributes(gl, pg){
+    const attributes = {};
+
+    // active attributeの個数を取得。
+    const numActiveAttributes = gl.getProgramParameter(pg, gl.ACTIVE_ATTRIBUTES);
+    console.log(`active attributeの個数は${numActiveAttributes}個です`);
+
+    for(let i=0; i<numActiveAttributes; i++){
+      // 取得は難しくない。uniformと似てる。
+      const attribute = gl.getActiveAttrib(pg, i);
+      const location = gl.getAttribLocation(pg, attribute.name);
+      console.log(`${attribute.name}のlocationは${location}です`);
+
+      attribute.location = location;
+      attributes[attribute.name] = attribute;
+    }
+
+    return attributes;
+  }
+
+  function uniformX(gl, pg, type, name){
+    const {uniforms} = pg;
+
+    // 存在しない場合はスルー
+    if(uniforms[name] === undefined) return;
+
+    // 存在するならlocationを取得
+    const location = uniforms[name].location;
+
+    // nameのあとに引数を並べる。そのまま放り込む。
+    const args = [...arguments].slice(4);
+    switch(type){
+      case "1f": gl.uniform1f(location, ...args); break;
+      case "2f": gl.uniform2f(location, ...args); break;
+      case "3f": gl.uniform3f(location, ...args); break;
+      case "4f": gl.uniform4f(location, ...args); break;
+      case "1fv": gl.uniform1fv(location, ...args); break;
+      case "2fv": gl.uniform2fv(location, ...args); break;
+      case "3fv": gl.uniform3fv(location, ...args); break;
+      case "4fv": gl.uniform4fv(location, ...args); break;
+      case "1i": gl.uniform1i(location, ...args); break;
+      case "2i": gl.uniform2i(location, ...args); break;
+      case "3i": gl.uniform3i(location, ...args); break;
+      case "4i": gl.uniform4i(location, ...args); break;
+      case "1iv": gl.uniform1iv(location, ...args); break;
+      case "2iv": gl.uniform2iv(location, ...args); break;
+      case "3iv": gl.uniform3iv(location, ...args); break;
+      case "4iv": gl.uniform4iv(location, ...args); break;
+    }
+    if(type === "matrix2fv"||type==="matrix3fv"||type==="matrix4fv"){
+      const v = (args[0] instanceof Float32Array ? args[0] : new Float32Array(args[0]));
+      switch(type){
+        case "matrix2fv": gl.uniformMatrix2fv(location, false, v); break;
+        case "matrix3fv": gl.uniformMatrix3fv(location, false, v); break;
+        case "matrix4fv": gl.uniformMatrix4fv(location, false, v); break;
+      }
+    }
+  }
+
+  utils.createShaderProgram = createShaderProgram;
+  utils.uniformX = uniformX; // projectXみたいでなんかいいね（馬鹿）
+
+  return utils;
+});
+
+// ------------------------------------------------------------------------------------------------------------------------------------------ //
+
 // utility. ユーティリティ。DamperやTimerなどはここ。色関連も。文字列とかはこっちかもしれない。
 const foxUtils = (function(){
   const utils = {};
