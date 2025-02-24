@@ -1386,12 +1386,249 @@ const fox3Dtools = (function(){
     }
   }
 
+  // --------------------------------- MT3 --------------------------------- //
+
+  class MT3{
+    constructor(){
+      // 列挙のみ許す。
+      const args = [...arguments];
+      this.m = new Float32Array(9);
+      if(args.length === 0){
+        // 空っぽの場合
+        for(let i=0; i<9; i++){
+          this.m[i] = (i%4===0 ? 1 : 0); // 単位行列
+        }
+      }else if(args.length === 4){
+        // 2x2の場合（単位行列でベースを作って左上だけ上書きする）
+        for(let i=0; i<9; i++){
+          this.m[i] = (i%4===0 ? 1 : 0); // 単位行列
+        }
+        for(let y=0; y<2; y++){
+          for(let x=0; x<2; x++){
+            this.m[3*y+x] = args[2*y+x];
+          }
+        }
+      }else{
+        // 3x3の場合も含めて「その他」
+        for(let i=0; i<9; i++){
+          if(i<args.length){
+            this.m[i] = args[i];
+          }else{
+            this.m[i] = 0;
+          }
+        }
+      }
+    }
+    set(n){
+      if(Array.isArray(n)){
+        if(n.length === 4){
+          // 4の場合は左上の2x2におく
+          for(let i=0; i<9; i++){
+            this.m[i] = (i%4===0 ? 1 : 0); // 単位行列
+          }
+          // 左上だけ上書き
+          for(let y=0; y<2; y++){
+            for(let x=0; x<2; x++){
+              this.m[3*y+x] = n[2*y+x];
+            }
+          }
+        }else{
+          // 0埋めしてるけど基本9想定
+          for(let i=0; i<9; i++){
+            if(i < n.length){ this.m[i] = n[i]; }else{ this.m[i] = 0; }
+          }
+        }
+        return this;
+      }else if(typeof(arguments[0]) === 'number'){
+        // 列挙の場合
+        const args = [...arguments];
+        return this.set(args);
+      }
+      // 最後に、普通に行列の場合
+      for(let i=0; i<9; i++){ this.m[i] = n.m[i]; }
+      return this;
+    }
+    copy(){
+      const m = new MT3();
+      return m.set(this);
+    }
+    show(directConsole = false, threshold = 0){
+      // 閾値でチェックして絶対値がそれ未満であれば0とする
+      const showValues = [];
+      for(let i=0; i<9; i++){
+        showValues.push(Math.abs(this.m[i]) < threshold ? 0 : this.m[i]);
+      }
+      // trueの場合は直接コンソールに出す
+      const info = `${showValues[0]}, ${showValues[1]}, ${showValues[2]}, \n${showValues[3]}, ${showValues[4]}, ${showValues[5]}, \n${showValues[6]}, ${showValues[7]}, ${showValues[8]}`;
+      if(directConsole){
+        console.log(info);
+      }
+      return info;
+    }
+    convert(){
+      // まあ要らないんだけど0,3,1,4,2,5の配列を返すんです。要らないけど。
+      return [this.m[0], this.m[3], this.m[1], this.m[4], this.m[2], this.m[5]];
+    }
+    array(){
+      // Float32Arrayではなく通常のArray形式で成分配列を返す。一列につなげたりするのに便利かと。Float32はpushとか使えないし。
+      const a = new Array(9);
+      for(let i=0; i<9; i++){ a[i] = this.m[i]; }
+      return a;
+    }
+    init(){
+      // 単位行列で初期化
+      this.set([1,0,0, 0,1,0, 0,0,1]);
+      return this;
+    }
+    add(n, immutable = false){
+      // 和
+      if(immutable){
+        return this.copy().add(n, false);
+      }
+      const target = (Array.isArray(n) ? n : n.m);
+      for(let i=0; i<9; i++){
+        this.m[i] += target[i];
+      }
+      return this;
+    }
+    sub(n, immutable = false){
+      // 差
+      if(immutable){
+        return this.copy().sub(n, false);
+      }
+      const target = (Array.isArray(n) ? n : n.m);
+      for(let i=0; i<9; i++){
+        this.m[i] -= target[i];
+      }
+      return this;
+    }
+    multV(v, immutable = false){
+      // vは3次元ベクトルでx,y,z成分を持つ
+      // Vectaでもp5.Vectorでも{x,y,z}でも何でもあり。
+      if(immutable){
+        // 不変
+        return this.multV(v.copy(), false);
+      }
+      const {x:a, y:b, z:c} = v;
+      v.x = this.m[0]*a + this.m[1]*b + this.m[2]*c;
+      v.y = this.m[3]*a + this.m[4]*b + this.m[5]*c;
+      v.z = this.m[6]*a + this.m[7]*b + this.m[8]*c;
+      return v;
+    }
+    multM(n, immutable = false){
+      // nのところには配列も入れられるようにする。ただし長さは9限定とする。
+      if(immutable){
+        // 不変
+        return this.copy().multM(n, false);
+      }
+      const target = (Array.isArray(n) ? n : n.m);
+      const m2 = new Array(9);
+      for(let i=0; i<9; i++){ m2[i] = this.m[i]; }
+      for(let k=0; k<3; k++){
+        for(let i=0; i<3; i++){
+          this.m[3*k+i] = m2[3*k]*target[i] + m2[3*k+1]*target[i+3] + m2[3*k+2]*target[i+6];
+        }
+      }
+      return this;
+    }
+    transpose(immutable = false){
+      if(immutable){
+        return this.copy().transpose(false);
+      }
+      let swapper;
+      for(let k=0; k<3; k++){
+        for(let i=k+1; i<3; i++){
+          swapper = this.m[3*k+i];
+          this.m[3*k+i] = this.m[3*i+k];
+          this.m[3*i+k] = swapper;
+        }
+      }
+      return this;
+    }
+    invert(immutable = false){
+      if(immutable){
+        return this.copy().invert(false);
+      }
+      const n = this.array();
+      const det = n[0]*n[4]*n[8] + n[1]*n[5]*n[6] + n[2]*n[3]*n[7] - n[2]*n[4]*n[6] - n[1]*n[3]*n[8] - n[0]*n[5]*n[7];
+      const indices = [4,8,5,7, 2,7,1,8, 1,5,2,4,
+                       5,6,3,8, 0,8,2,6, 2,3,0,5,
+                       3,7,4,6, 1,6,0,7, 0,4,1,3];
+      for(let i=0; i<9; i++){
+        const offset = i*4;
+        const a0 = indices[offset];
+        const a1 = indices[offset+1];
+        const a2 = indices[offset+2];
+        const a3 = indices[offset+3];
+        this.m[i] = (n[a0] * n[a1] - n[a2] * n[a3]) / det;
+      }
+      return this;
+    }
+    localScale(a=1,b=1){
+      // 引数が1つなら全部一緒
+      if(arguments.length === 1){
+        b = a;
+      }
+      // a,0,0,0,b,0,0,0,1を右から掛ける。局所原点に対してa倍、b倍される
+      return this.multM([a,0,0,0,b,0,0,0,1]);
+    }
+    globalScale(a=1,b=1){
+      // 引数が1つなら全部一緒
+      if(arguments.length === 1){
+        b = a;
+      }
+      // a,0,0,0,b,0,0,0,1を左から掛ける。大域原点中心で成分ごとに拡大される。
+      return this.transpose.multM([a,0,0,0,b,0,0,0,1]).transpose();
+    }
+    localTranslation(a=0,b=0){
+      // 1,0,a,0,1,b,0,0,1を右から掛ける。局所原点にa*ex+b*eyが足される。
+      return this.multM([1,0,a,0,1,b,0,0,1]);
+    }
+    globalTranslation(a=0,b=0){
+      // 1,0,a,0,1,b,0,0,1を左から掛ける。局所原点が(a,b)だけ移動する。
+      return this.transpose().multM([1,0,0,0,1,0,a,b,1]).transpose();
+    }
+    localRotation(t=0){
+      // cos(t),-sin(t),0,sin(t),cos(t),0,0,0,1を右から掛ける。
+      // 座標軸が局所原点中心にtだけ回転する。
+      const c = Math.cos(t);
+      const s = Math.sin(t);
+      return this.multM([c,-s,0,s,c,0,0,0,1]);
+    }
+    globalRotation(t=0){
+      // cos(t),-sin(t),0,sin(t),cos(t),0,0,0,1を左から掛ける。
+      // 座標軸が大域原点中心にtだけ回転する。
+      const c = Math.cos(t);
+      const s = Math.sin(t);
+      return this.transpose().multM([c,s,0,-s,c,0,0,0,1]).transpose();
+    }
+    setScale(a=1,b=1,c=1){
+      return this.init().localScale(...arguments);
+    }
+    setTranslation(a=0,b=0,c=0){
+      return this.init().localTranslation(...arguments);
+    }
+    setRotation(t=0){
+      return this.init().localRotation(...arguments);
+    }
+    static getScale(){
+      return (new MT3()).setScale(...arguments);
+    }
+    static getRotation(){
+      return (new MT3()).setRotation(...arguments);
+    }
+    static getTranslation(){
+      return (new MT3()).setTranslation(...arguments);
+    }
+  }
+
   tools.Vecta = Vecta;
   tools.Quarternion = Quarternion;
   tools.MT4 = MT4;
   tools.QCamera = QCamera;
   tools.QCameraPerse = QCameraPerse;
   tools.QCameraOrtho = QCameraOrtho;
+  tools.MT3 = MT3;
 
   return tools;
 })();
