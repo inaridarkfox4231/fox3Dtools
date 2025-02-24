@@ -820,53 +820,66 @@ const fox3Dtools = (function(){
       this.transpose(false);
       return this;
     }
-    setScale(a=1, b=1, c=1){
+    localScale(a=1,b=1,c=1){
       // 引数が1個なら全部一緒
       if(arguments.length === 1){
         b = a; c = a;
       }
-      this.set([
-        a, 0, 0, 0, b, 0, 0, 0, c
-      ]);
-      return this;
+      // a,0,0,0, 0,b,0,0, 0,0,c,0, 0,0,0,1を右から掛ける。各々の軸を定数倍。
+      return this.multM([a,0,0,0, 0,b,0,0, 0,0,c,0, 0,0,0,1]);
     }
-    setRotation(axis, angle){
-      // 軸の指定方法は3種類
-      if(Array.isArray(axis)){
-        axis = new Vecta(axis[0], axis[1], axis[2]);
-      }else if(arguments.length === 4){
-        axis = new Vecta(arguments[0], arguments[1], arguments[2]);
-        angle = arguments[3];
+    globalScale(a=1,b=1,c=1){
+      // 引数が1個なら全部一緒
+      if(arguments.length === 1){
+        b = a; c = a;
       }
-      axis.normalize();
-      // axisはベクトル。angleは角度。
-      const C = Math.cos(angle);
-      const OC = 1-Math.cos(angle);
-      const S = Math.sin(angle);
-      const {x, y, z} = axis;
-      this.set([
-        C + OC*x*x, OC*x*y - S*z, OC*x*z + S*y,
-        OC*x*y + S*z, C + OC*y*y, OC*y*z - S*x,
-        OC*x*z - S*y, OC*y*z + S*x, C + OC*z*z
-      ]);
-      return this;
+      // a,0,0,0, 0,b,0,0, 0,0,c,0, 0,0,0,1を左から掛ける。大域原点中心に拡大。
+      return this.transpose().multM([a,0,0,0, 0,b,0,0, 0,0,c,0, 0,0,0,1]).transpose();
     }
-    setTranslation(a=0, b=0, c=0){
+    localTranslation(a=0,b=0,c=0){
       // 引数は配列やベクトルも可能とする。
       if(Array.isArray(a)){
-        this.setTranslation(a[0], a[1], a[2]);
+        this.localTranslation(a[0], a[1], a[2]);
         return this;
       }else if(a instanceof Vecta){
-        this.setTranslation(a.x, a.y, a.z);
+        this.localTranslation(a.x, a.y, a.z);
         return this;
       }
-      this.set([
-        1, 0, 0, a,
-        0, 1, 0, b,
-        0, 0, 1, c,
-        0, 0, 0, 1
-      ]);
-      return this;
+      // 1,0,0,a, 0,1,0,b, 0,0,1,c, 0,0,0,1を右から掛ける。軸のa,b,c倍で局所原点を...
+      return this.multM([1,0,0,a, 0,1,0,b, 0,0,1,c, 0,0,0,1]);
+    }
+    globalTranslation(a=0,b=0,c=0){
+      // 引数は配列やベクトルも可能とする。
+      if(Array.isArray(a)){
+        this.globalTranslation(a[0], a[1], a[2]);
+        return this;
+      }else if(a instanceof Vecta){
+        this.globalTranslation(a.x, a.y, a.z);
+        return this;
+      }
+      // 1,0,0,a, 0,1,0,b, 0,0,1,c, 0,0,0,1を左から掛ける。
+      // 局所原点の平行移動。
+      return this.transpose().multM([1,0,0,0, 0,1,0,0, 0,0,1,0, a,b,c,1]).transpose();
+    }
+    localRotation(axis, angle){
+      // 回転行列を右から掛ける。例えば0,1,0だったらローカルy軸周りの回転
+      const rot = MT4.getRotationMatrix(...arguments);
+      return this.multM(rot);
+    }
+    globalRotation(axis, angle){
+      // 回転行列を左から掛ける。グローバル。大域原点周りの回転。
+      const rot = MT4.getRotationMatrix(...arguments);
+      rot.transpose();
+      return this.transpose().multM(rot).transpose();
+    }
+    setScale(a=1,b=1,c=1){
+      return this.init().localScale(...arguments);
+    }
+    setTranslation(a=0, b=0, c=0){
+      return this.init().localTranslation(...arguments);
+    }
+    setRotation(axis, angle){
+      return this.init().localRotation(...arguments);
     }
     setPerseProjection(fov, aspect, near, far){
       // パース射影行列。
@@ -909,6 +922,28 @@ const fox3Dtools = (function(){
       const scaleMat = MT4.getScale(s);
       this.multM(scaleMat);
       return this;
+    }
+    static getRotationMatrix(axis, angle){
+      // 回転行列部分だけ取り出すか
+      // 軸の指定方法は3種類
+      if(Array.isArray(axis)){
+        axis = new Vecta(axis[0], axis[1], axis[2]);
+      }else if(arguments.length === 4){
+        axis = new Vecta(arguments[0], arguments[1], arguments[2]);
+        angle = arguments[3];
+      }
+      axis.normalize();
+      // axisはベクトル。angleは角度。
+      const C = Math.cos(angle);
+      const OC = 1-Math.cos(angle);
+      const S = Math.sin(angle);
+      const {x, y, z} = axis;
+      return new MT4(
+        C + OC*x*x, OC*x*y - S*z, OC*x*z + S*y, 0,
+        OC*x*y + S*z, C + OC*y*y, OC*y*z - S*x, 0,
+        OC*x*z - S*y, OC*y*z + S*x, C + OC*z*z, 0,
+        0, 0, 0, 1
+      );
     }
     // 引数のバリエーションが豊富でいちいちバリデーション掛けた方が負荷が大きい場合は
     // immutableをstaticで用意した方がいい。ベクトルとは事情が違う。こっちは関数も
