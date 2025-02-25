@@ -161,6 +161,12 @@ const webglUtils = (function(){
 const foxUtils = (function(){
   const utils = {};
 
+  // Damper.
+  // 減衰を表現するためのツール
+  // 生成時に個別に名前の列挙で用意して各々のagentに名前でアクセスして使う。actionで値を加算する。基本的にインタラクションで実行する。
+  // 加算する際のfactorを決めることができるし上限値と下限値も決められる。これらは速度に当たる。要はactionとはapplyForceである。
+  // setMainでそれらの値で何をするのかを登録し(this引数)、executeで毎フレーム実行する。updateは個別の処理だが
+  // applyAllでまとめて指定することもできる。pause/startで一時的に値の更新や減衰が起きないようにできる。
   class Damper{
     constructor(){
       this.dampers = {};
@@ -259,9 +265,16 @@ const foxUtils = (function(){
       damp.pause = false;
       return this;
     }
-    applyAll(actionName){
-      for(const name of Object.keys(this.dampers)){
-        this[actionName](name);
+    applyAll(actionName, targets = []){
+      // targetsで適用範囲を配列形式で決められる。未指定の場合はすべて。
+      if(targets.length === 0){
+        for(const name of Object.keys(this.dampers)){
+          this[actionName](name);
+        }
+      }else{
+        for(const name of targets){
+          this[actionName](name);
+        }
       }
       return this;
     }
@@ -288,8 +301,6 @@ const foxIA = (function(){
       this.dy = 0;
       this.prevX = 0;
       this.prevY = 0;
-      //this.canvasLeft = 0;
-      //this.canvasTop = 0;
       this.rect = {width:0, height:0, left:0, top:0};
       this.button = -1; // マウス用ボタン記録。-1:タッチですよ！の意味
     }
@@ -297,8 +308,6 @@ const foxIA = (function(){
       this.x = e.clientX - rect.left;
       this.y = e.clientY - rect.top;
       this.parent = parent;
-      //this.canvasLeft = left;
-      //this.canvasTop = top;
       const {width, height, left, top} = rect;
       this.rect = {width, height, left, top};
       this.prevX = this.x;
@@ -324,8 +333,6 @@ const foxIA = (function(){
       this.x = t.clientX - rect.left; // 要するにmouseX的なやつ
       this.y = t.clientY - rect.top; // 要するにmouseY的なやつ
       this.parent = parent;
-      //this.canvasLeft = left;
-      //this.canvasTop = top;
       const {width, height, left, top} = rect;
       this.rect = {width, height, left, top};
       this.prevX = this.x;
@@ -335,8 +342,6 @@ const foxIA = (function(){
       // マウスでもタッチでも実行する
       const prevLeft = this.rect.left;
       const prevTop = this.rect.top;
-      //this.canvasLeft = left;
-      //this.canvasTop = top;
       const {width, height, left, top} = rect;
       this.rect = {width, height, left, top};
       this.x += prevLeft - left;
@@ -374,15 +379,9 @@ const foxIA = (function(){
     constructor(canvas, options = {}){
       this.pointers = [];
       this.factory = ((t) => new PointerPrototype());
-      //this.width = 0;
-      //this.height = 0;
       // leftとtopがwindowのサイズ変更に対応するために必要
       // コンストラクタでは出来ませんね。初期化時の処理。
       this.rect = {width:0, height:0, left:0, top:0};
-      //this.canvasWidth = 0;
-      //this.canvasHeight = 0;
-      //this.canvasLeft = 0; // touch用
-      //this.canvasTop = 0; // touch用
       this.tapCount = 0; // ダブルタップ判定用
       this.firstTapped = {x:0, y:0};
       // コンストラクタで初期化しましょ
@@ -395,17 +394,10 @@ const foxIA = (function(){
       const {factory = ((t) => new PointerPrototype())} = options;
       this.factory = factory;
       // 横幅縦幅を定義
-      //this.width = Number((canvas.style.width).split("px")[0]);
-      //this.height = Number((canvas.style.height).split("px")[0]);
       // touchの場合はこうしないときちんとキャンバス上の座標が取得できない
       // どうもrectからwidthとheightが出る？じゃあそれでいいですね。pixelDensityによらない、css上の値。
-      //const rect = canvas.getBoundingClientRect();
       const {width, height, left, top} = canvas.getBoundingClientRect();
       this.rect = {width, height, left, top};
-      //this.canvasWidth = rect.width;
-      //this.canvasHeight = rect.height;
-      //this.canvasLeft = rect.left;
-      //this.canvasTop = rect.top;
       // 右クリック時のメニュー表示を殺す
       // 一応デフォルトtrueのオプションにするか...（あんま意味ないが）
       const {preventOnContextMenu = true} = options;
@@ -468,8 +460,6 @@ const foxIA = (function(){
       // 対象のキャンバスを更新
       const {width, height, left, top} = newRect;
       this.rect = {width, height, left, top};
-      //this.canvasLeft = left;
-      //this.canvasTop = top;
       for(const p of this.pointers){ p.updateCanvasData(newRect); }
     }
     mouseDownAction(e){
@@ -479,7 +469,6 @@ const foxIA = (function(){
     mouseDownPointerAction(e){
       const p = this.factory(this);
       if (p === null) return; // factoryがnullを返す場合はpointerを生成しない
-      //p.mouseInitialize(e, this.canvasLeft, this.canvasTop);
       p.mouseInitialize(e, this.rect, this);
       p.mouseDownAction(e);
       this.pointers.push(p);
@@ -489,7 +478,6 @@ const foxIA = (function(){
     }
     mouseMoveAction(e){
       this.mouseMovePointerAction(e);
-      //this.mouseMoveDefaultAction(e.movementX, e.movementY, e.clientX - this.canvasLeft, e.clientY - this.canvasTop);
       // なぜmovementを使っているかというと、
       // このアクションはポインターが無関係だから（ポインターが無くても実行される）
       // まずいのはわかってるけどね...
@@ -596,7 +584,6 @@ const foxIA = (function(){
         if(!equalFlag){
           const p = this.factory(this);
           if (p === null) return; // factoryがnullを返す場合はpointerを生成しない
-          //p.touchInitialize(currentTouches[i], this.canvasLeft, this.canvasTop);
           p.touchInitialize(currentTouches[i], this.rect, this);
           p.touchStartAction(currentTouches[i]);
           newPointers.push(p);
@@ -1101,7 +1088,9 @@ const foxIA = (function(){
     }
   }
 
-  // 内部クラス。これも供用した方がいいのかしら（もしかしたら便利かもしれない）
+  // Soldier.
+  // これを継承すればpointerdownやpointerupをパラメータありで使うことができる。
+  // Brushにはこっちの方が適任かもしれない。
   class Soldier extends PointerPrototype{
     constructor(commands = {}){
       super();
