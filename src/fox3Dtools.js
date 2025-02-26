@@ -1900,6 +1900,22 @@ const fox3Dtools = (function(){
       }
       return this;
     }
+    inverseMultM(n, immutable = false){
+      // 逆乗算。逆というか左乗算。
+      if(immutable){
+        // 不変
+        return this.copy().inverseMultM(n, false);
+      }
+      const target = (Array.isArray(n) ? n : n.m);
+      const m2 = new Array(16);
+      for(let i=0; i<16; i++){ m2[i] = this.m[i]; }
+      for(let k=0; k<4; k++){
+        for(let i=0; i<4; i++){
+          this.m[4*k+i] = target[4*k]*m2[i] + target[4*k+1]*m2[i+4] + target[4*k+2]*m2[i+8] + target[4*k+3]*m2[i+12];
+        }
+      }
+      return this;
+    }
     transpose(immutable = false){
       if(immutable){
         return this.copy().transpose(false);
@@ -1983,7 +1999,7 @@ const fox3Dtools = (function(){
         b = a; c = a;
       }
       // a,0,0,0, 0,b,0,0, 0,0,c,0, 0,0,0,1を左から掛ける。大域原点中心に拡大。
-      return this.transpose().multM([a,0,0,0, 0,b,0,0, 0,0,c,0, 0,0,0,1]).transpose();
+      return this.inverseMultM([a,0,0,0, 0,b,0,0, 0,0,c,0, 0,0,0,1]);
     }
     localTranslation(a=0,b=0,c=0){
       // 引数は配列やベクトルも可能とする。
@@ -2008,7 +2024,7 @@ const fox3Dtools = (function(){
       }
       // 1,0,0,a, 0,1,0,b, 0,0,1,c, 0,0,0,1を左から掛ける。
       // 局所原点の平行移動。
-      return this.transpose().multM([1,0,0,0, 0,1,0,0, 0,0,1,0, a,b,c,1]).transpose();
+      return this.inverseMultM([1,0,0,a, 0,1,0,b, 0,0,1,c, 0,0,0,1]);
     }
     localRotation(axis, angle){
       // 回転行列を右から掛ける。例えば0,1,0だったらローカルy軸周りの回転
@@ -2018,8 +2034,7 @@ const fox3Dtools = (function(){
     globalRotation(axis, angle){
       // 回転行列を左から掛ける。グローバル。大域原点周りの回転。
       const rot = MT4.getRotationMatrix(...arguments);
-      rot.transpose();
-      return this.transpose().multM(rot).transpose();
+      return this.inverseMultM(rot);
     }
     setScale(a=1,b=1,c=1){
       return this.init().localScale(...arguments);
