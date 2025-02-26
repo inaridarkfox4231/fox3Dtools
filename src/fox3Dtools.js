@@ -2695,6 +2695,22 @@ const fox3Dtools = (function(){
       }
       return this;
     }
+    inverseMultM(n, immutable = false){
+      // nのところには配列も入れられるようにする。ただし長さは9限定とする。
+      if(immutable){
+        // 不変
+        return this.copy().inverseMultM(n, false);
+      }
+      const target = (Array.isArray(n) ? n : n.m);
+      const m2 = new Array(9);
+      for(let i=0; i<9; i++){ m2[i] = this.m[i]; }
+      for(let k=0; k<3; k++){
+        for(let i=0; i<3; i++){
+          this.m[3*k+i] = target[3*k]*m2[i] + target[3*k+1]*m2[i+3] + target[3*k+2]*m2[i+6];
+        }
+      }
+      return this;
+    }
     transpose(immutable = false){
       if(immutable){
         return this.copy().transpose(false);
@@ -2742,7 +2758,7 @@ const fox3Dtools = (function(){
         b = a;
       }
       // a,0,0,0,b,0,0,0,1を左から掛ける。大域原点中心で成分ごとに拡大される。
-      return this.transpose.multM([a,0,0,0,b,0,0,0,1]).transpose();
+      return this.inverseMultM([a,0,0,0,b,0,0,0,1]);
     }
     localTranslation(a=0,b=0){
       // 1,0,a,0,1,b,0,0,1を右から掛ける。局所原点にa*ex+b*eyが足される。
@@ -2750,7 +2766,7 @@ const fox3Dtools = (function(){
     }
     globalTranslation(a=0,b=0){
       // 1,0,a,0,1,b,0,0,1を左から掛ける。局所原点が(a,b)だけ移動する。
-      return this.transpose().multM([1,0,0,0,1,0,a,b,1]).transpose();
+      return this.inverseMultM([1,0,a,0,1,b,0,0,1]);
     }
     localRotation(t=0){
       // cos(t),-sin(t),0,sin(t),cos(t),0,0,0,1を右から掛ける。
@@ -2764,7 +2780,7 @@ const fox3Dtools = (function(){
       // 座標軸が大域原点中心にtだけ回転する。
       const c = Math.cos(t);
       const s = Math.sin(t);
-      return this.transpose().multM([c,s,0,-s,c,0,0,0,1]).transpose();
+      return this.inverseMultM([c,-s,0,s,c,0,0,0,1]);
     }
     setScale(a=1,b=1,c=1){
       return this.init().localScale(...arguments);
