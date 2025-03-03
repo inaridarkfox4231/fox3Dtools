@@ -612,6 +612,8 @@ const foxUtils = (function(){
   utils.RandomChoiceArray = RandomChoiceArray;
   utils.RoundRobinArray = RoundRobinArray;
   utils.SweepArray = SweepArray;
+  utils.Tree = Tree;
+
   utils.Vertice = Vertice;
   utils.Edge = Edge;
 
