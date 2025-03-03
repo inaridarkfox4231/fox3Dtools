@@ -280,7 +280,343 @@ const foxUtils = (function(){
     }
   }
 
+  // ArrayWrapper.
+  // 配列のラッパ。引数は配列でも列挙でも可能。
+  class ArrayWrapper extends Array{
+    constructor(){
+      super();
+      const args = [...arguments];
+      if(Array.isArray(args[0])){
+        this.push(...args);
+      }else{
+        for(let i=0; i<args.length; i++){
+          this.push(args[i]);
+        }
+      }
+    }
+  }
+
+  // RoundRobinArray.
+  // 一通り順番にさらって元に戻る。null固定はなし。なのでこういう書き方にしてはいるがresetの必要はない。
+  // とはいえ最初に戻ることには意味があるのでおいてある。
+  class RoundRobinArray extends ArrayWrapper{
+    constructor(){
+      super(...arguments);
+      this.index = 0;
+    }
+    pick(){
+      if(this.index < this.length){
+        const returnValue = this[this.index];
+        this.index = (this.index + 1) % this.length;
+        return returnValue;
+      }
+      return null;
+    }
+    reset(){
+      this.index = 0;
+    }
+  }
+
+  // RandomChoiceArray.
+  // ランダムに内容が重複なく取得されていき、取り尽くされるとnull固定になる。resetで戻せる。
+  class RandomChoiceArray extends ArrayWrapper{
+    constructor(){
+      super(...arguments);
+      this.rest = this.length;
+    }
+    add(v){
+      // 性質上、restは長さなので、追加するたびにこれを変更すべき。
+      // pickとは別の処理でこれを実行する。
+      this.push(v);
+      this.rest = this.length;
+      return this;
+    }
+    pick(){
+      // 0,1,2,3,4のうち3が選ばれたら3と4を変えて0,1,2,4,3にして3を返す
+      if(this.rest > 0){
+        const i = Math.floor(Math.random()*this.rest*0.999);
+        let swapper = this[i];
+        this[i] = this[this.rest-1];
+        this[this.rest-1] = swapper;
+        this.rest--;
+        return swapper;
+      }
+      return null;
+    }
+    reset(){
+      this.rest = this.length;
+    }
+  }
+
+  // SweepArray.
+  // 中身を頭から順繰りに出していく。終わったらnull固定になる。resetで戻せる。
+  class SweepArray extends ArrayWrapper{
+    constructor(){
+      super(...arguments);
+      this.index = 0;
+    }
+    pick(){
+      if(this.index < this.length){
+        return this[this.index++];
+      }
+      return null;
+    }
+    reset(){
+      this.index = 0;
+    }
+  }
+
+  // Tree.
+  // 親はparentで子はSweepArrayで管理。要するに走査前提。ヒエラルキー前提。一応、depthも備えてある。
+  // scanningのstatic関数があり、これを使って色々できる仕組み。
+  class Tree{
+    constructor(){
+      this.childs = new SweepArray();
+      this.parent = null;
+      this.depth = 0;
+    }
+    initialize(){
+      this.childs.length = 0;
+      this.parent = null;
+      this.depth = 0;
+      return this;
+    }
+    setDepth(d){
+      this.depth = d;
+      return this;
+    }
+    getDepth(){
+      return this.depth;
+    }
+    setParent(p){
+      this.parent = p;
+      return this;
+    }
+    getParent(){
+      return this.parent;
+    }
+    addChild(c){
+      this.childs.push(c);
+      c.setParent(this);
+      return this;
+    }
+    pick(){
+      return this.childs.pick();
+    }
+    reset(){
+      this.childs.reset();
+      return this;
+    }
+    getIndex(){
+      return this.childs.index;
+    }
+    static scan(nodeTree, action = {}){
+      const {firstArrived = () => {}, lastArrived = () => {}} = action;
+
+      let curTree = nodeTree;
+
+      const stuck = [];
+      while(true){
+        // 最初に到達したときになんかやりたい
+        if(curTree.getIndex() === 0){
+          firstArrived(curTree);
+        }
+        const nextTree = curTree.pick();
+        if(nextTree === null){
+          // nextTreeがnullというのは要するにどんづまりなので、
+          // 結果に依らずこのときのcurTreeはresetしていいと思う
+          curTree.reset();
+          if(stuck.length === 0){
+            break;
+          }else{
+            // 最後に到達したときになんかやりたい
+            lastArrived(curTree);
+            curTree = stuck.pop();
+          }
+        }else{
+          stuck.push(curTree);
+          curTree = nextTree;
+        }
+      }
+    }
+  }
+
+  // Vertice.
+  // グラフという概念の「頂点」の抽象化。自分の観点から見た場合の。それは自分の中ではプレツリー（木の前段階）なので、
+  // treeを持たせてある。というかtreeにヒエラルキーを与える関数を付随させている。通常ヒエラルキーはaddChildで動的に構成するが、
+  // グラフ構造を援用して構築できるようにもした方がいい。connectedはEdgeの集合。
+  class Vertice{
+    constructor(tree = new Tree()){
+      this.dirtyFlag = false;
+      this.connected = new RandomChoiceArray();
+      this.branches = new SweepArray();
+      this.tree = tree;
+    }
+    setTree(tree){
+      this.tree = tree;
+      return this;
+    }
+    initialize(){
+      this.connected.length = 0;
+      this.connected.reset();
+      return this;
+    }
+    branchInitialize(){
+      this.branches.length = 0;
+      this.branches.reset();
+      return this;
+    }
+    treeInitialize(){
+      this.tree.initialize();
+      this.tree.reset();
+      return this;
+    }
+    regist(e){
+      // addを使うことで追加のたびにrestが更新される。
+      this.connected.add(e);
+      return this;
+    }
+    reset(){
+      // dirtyFlagをリセットする
+      this.dirtyFlag = false;
+      return this;
+    }
+    checked(){
+      // チェックしたかどうかを調べる
+      return this.dirtyFlag;
+    }
+    check(){
+      // dirtyFlagをオンにする
+      this.dirtyFlag = true;
+      return this;
+    }
+    static createTree(nodeVertice){
+      let curVertice = nodeVertice;
+      curVertice.check();
+
+      const stuck = [];
+      while(true){
+        const connectedEdge = curVertice.connected.pick();
+        if(connectedEdge === null){
+          // ここのタイミングでリセット可能
+          curVertice.connected.reset();
+          if(stuck.length === 0){
+            break;
+          }else{
+            curVertice = stuck.pop();
+          }
+        }else{
+          connectedEdge.check();
+          const nextVertice = connectedEdge.getOppositeVertice(curVertice);
+          if(nextVertice.checked()){
+            continue;
+          }
+          curVertice.branches.push(connectedEdge);
+          nextVertice.branches.push(connectedEdge);
+          nextVertice.check();
+          stuck.push(curVertice);
+          curVertice = nextVertice;
+        }
+      }
+    }
+    static createHierarchy(nodeVertice){
+      let curVertice = nodeVertice;
+      curVertice.check();
+
+      let curDepth = 0;
+
+      const stuck = [];
+      while(true){
+        if(curVertice.branches.index === 0){
+          // 初回訪問時にdepthを記録する
+          curVertice.tree.setDepth(curDepth);
+        }
+        const branch = curVertice.branches.pick();
+        if(branch === null){
+          // ここでリセットできる
+          curVertice.branches.reset();
+          if(stuck.length === 0){
+            break;
+          }else{
+            curVertice = stuck.pop();
+            curDepth--;
+          }
+        }else{
+          //e.check(); // checkするのはVerticeだけでOKです。
+          const nextVertice = branch.getOppositeVertice(curVertice);
+          if(nextVertice.checked()){
+            continue;
+          }
+          nextVertice.check();
+
+          curVertice.tree.addChild(nextVertice.tree);
+
+          stuck.push(curVertice);
+          curVertice = nextVertice;
+          curDepth++;
+        }
+      }
+    }
+  }
+
+  // Edgeはグラフ理論における「辺」でVertice同士をつなぐもの。これがないと木を構築できない。
+  class Edge{
+    constructor(v0, v1){
+      this.dirtyFlag = false;
+      this.vertices = [v0, v1];
+      v0.regist(this);
+      v1.regist(this);
+    }
+    getOppositeVertice(v){
+      if(v === this.vertices[0]){
+        return this.vertices[1];
+      }else if(v === this.vertices[1]){
+        return this.vertices[0];
+      }
+      return null;
+    }
+    reset(){
+      this.dirtyFlag = false;
+      return this;
+    }
+    checked(){
+      return this.dirtyFlag;
+    }
+    check(){
+      this.dirtyFlag = true;
+      return this;
+    }
+  }
+
+  function _bitSeparate16(n){
+    n = ((n<<8)|n) & 0x00ff00ff;
+    n = ((n<<4)|n) & 0x0f0f0f0f;
+    n = ((n<<2)|n) & 0x33333333;
+    n = ((n<<1)|n) & 0x55555555;
+    return n;
+  }
+
+  function morton16(a,b){
+    const m = _bitSeparate16(a);
+    const n = _bitSeparate16(b);
+    return m|(n<<1);
+  }
+
+  function morton16Symmetry(a, b){
+    return morton16(Math.min(a, b), Math.max(a, b));
+  }
+
   utils.Damper = Damper;
+
+  utils.ArrayWrapper = ArrayWrapper;
+  utils.RandomChoiceArray = RandomChoiceArray;
+  utils.RoundRobinArray = RoundRobinArray;
+  utils.SweepArray = SweepArray;
+  utils.Vertice = Vertice;
+  utils.Edge = Edge;
+
+  utils.morton16 = morton16; // 16bit符号なし整数の対を単整数と紐付ける。
+  utils.morton16Symmetry = morton16Symmetry;
 
   return utils;
 })();
@@ -2821,9 +3157,9 @@ const fox3Dtools = (function(){
 const foxApplications = (function(){
   const applications = {};
 
-  const {Damper} = foxUtils;
+  const {Damper, Tree} = foxUtils;
   const {Interaction} = foxIA;
-  const {Vecta} = fox3Dtools;
+  const {Vecta, MT4} = fox3Dtools;
 
   class CameraController extends Interaction{
     constructor(canvas, options = {}, params = {}){
@@ -2943,7 +3279,145 @@ const foxApplications = (function(){
     }
   }
 
+  // Transform木
+  // jointは構成用のトランスフォームで、ローカルで間をいじることで変形を可能にする
+  // さらに木構造なので組み立てができる
+  // 最終的にscanningでglobalを計算し描画する
+  // mainに登録して描画も実行できる、ただbone-meshの場合は不要か（boneを描画したいなら別だけど）
+  class TransformTree extends Tree{
+    constructor(){
+      super();
+      this.joint = new MT4();
+      this.local = new MT4();
+      this.global = new MT4();
+      this.main = () => {};
+    }
+    setMain(func){
+      this.main = func;
+      return this;
+    }
+    execute(){
+      this.main(this);
+      return this;
+    }
+    static computeGlobal(nodeTree){
+      const matStuck = [];
+      const curMat = new MT4();
+      // 初回訪問時にスタックに行列をとっておいて
+      // 現在の行列にjointとlocalを考慮させたうえで
+      // globalにセットする
+      // 最終訪問時（引き返す時）にスタックから行列を出す
+      Tree.scan(nodeTree, {
+        firstArrived:(t) => {
+          matStuck.push(curMat.copy());
+          curMat.multM(t.joint).multM(t.local);
+          t.global.set(curMat);
+        },
+        lastArrived:(t) => {
+          curMat.set(matStuck.pop());
+        }
+      });
+    }
+  }
+
+  // TransformTreeArray.
+  // nで個数を決める。配列の形で空っぽのTransformTreeを用意したうえで、index指定でjointとlocalを指定する
+  // tf木構築に対する答えの一つ。linkでつなげてsetMainで関数渡してexecuteで実行する。
+  class TransformTreeArray{
+    constructor(n=0){
+      this.factory = () => new TransformTree(); // とりあえずこれで。
+      this.tfs = [];
+      for(let i=0; i<n; i++){ this.addTF(); }
+      this.current = null;
+    }
+    addTF(){
+      this.tfs.push(this.factory());
+      return this;
+    }
+    getTF(i){
+      return this.tfs[i];
+    }
+    link(i, j){
+      this.tfs[i].addChild(this.tfs[j]);
+      return this;
+    }
+    on(i){
+      this.current = this.tfs[i];
+      return this;
+    }
+    setMain(func){
+      this.current.setMain(func);
+      return this;
+    }
+    setMainAll(func){
+      for(const tf of this.tfs){ tf.setMain(func); }
+      return this;
+    }
+    setJoint(m){
+      this.current.joint.set(m);
+      return this;
+    }
+    multJoint(m){
+      this.current.joint.multM(m);
+      return this;
+    }
+    jointI(){
+      this.current.joint.init();
+      return this;
+    }
+    jointT(){
+      this.current.joint.localTranslation(...arguments);
+      return this;
+    }
+    jointR(){
+      this.current.joint.localRotation(...arguments);
+      return this;
+    }
+    jointS(){
+      this.current.joint.localScale(...arguments);
+      return this;
+    }
+    setLocal(m){
+      this.current.local.set(m);
+      return this;
+    }
+    multLocal(m){
+      this.current.local.multM(m);
+      return this;
+    }
+    localI(){
+      this.current.local.init();
+      return this;
+    }
+    localT(){
+      this.current.local.localTranslation(...arguments);
+      return this;
+    }
+    localR(){
+      this.current.local.localRotation(...arguments);
+      return this;
+    }
+    localS(){
+      this.current.local.localScale(...arguments);
+      return this;
+    }
+    reset(){
+      for(const tf of this.tfs){ tf.reset(); }
+      return this;
+    }
+    execute(){
+      this.current.execute();
+      return this;
+    }
+    executeAll(){
+      for(const tf of this.tfs){ tf.execute(); }
+      return this;
+    }
+  }
+
   applications.CameraController = CameraController;
+  applications.TransformTree = TransformTree;
+  applications.TransformTreeArray = TransformTreeArray;
 
   return applications;
 })();
