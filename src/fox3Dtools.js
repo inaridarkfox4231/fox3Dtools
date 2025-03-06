@@ -3334,7 +3334,7 @@ const foxApplications = (function(){
       this.factory = factory;
       this.tfs = [];
       for(let i=0; i<n; i++){ this.addTF(); }
-      this.current = null;
+      //this.current = null;
     }
     addTF(){
       this.tfs.push(this.factory());
@@ -3347,8 +3347,9 @@ const foxApplications = (function(){
       this.tfs[i].addChild(this.tfs[j]);
       return this;
     }
-    setMain(func){
-      this.current.setMain(func);
+    setMain(i, func){
+      //this.current.setMain(func);
+      this.tfs[i].setMain(func);
       return this;
     }
     setMainAll(func){
@@ -3371,8 +3372,9 @@ const foxApplications = (function(){
       for(const tf of this.tfs){ tf.reset(); }
       return this;
     }
-    execute(){
-      this.current.execute();
+    execute(i){
+      //this.current.execute();
+      this.tfs[i].execute();
       return this;
     }
     executeAll(){
