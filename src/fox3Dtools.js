@@ -3286,11 +3286,13 @@ const foxApplications = (function(){
   // さらに木構造なので組み立てができる
   // 最終的にscanningでglobalを計算し描画する
   // mainに登録して描画も実行できる、ただbone-meshの場合は不要か（boneを描画したいなら別だけど）
+  // model行列を追加
   class TransformTree extends Tree{
     constructor(){
       super();
       this.joint = new MT4();
       this.local = new MT4();
+      this.model = new MT4();
       this.global = new MT4();
       this.main = () => {};
     }
@@ -3307,13 +3309,14 @@ const foxApplications = (function(){
       const curMat = new MT4();
       // 初回訪問時にスタックに行列をとっておいて
       // 現在の行列にjointとlocalを考慮させたうえで
+      // modelを加味して
       // globalにセットする
       // 最終訪問時（引き返す時）にスタックから行列を出す
       Tree.scan(nodeTree, {
         firstArrived:(t) => {
           matStuck.push(curMat.copy());
           curMat.multM(t.joint).multM(t.local);
-          t.global.set(curMat);
+          t.global.set(curMat).multM(t.model);
         },
         lastArrived:(t) => {
           curMat.set(matStuck.pop());
@@ -3325,9 +3328,10 @@ const foxApplications = (function(){
   // TransformTreeArray.
   // nで個数を決める。配列の形で空っぽのTransformTreeを用意したうえで、index指定でjointとlocalを指定する
   // tf木構築に対する答えの一つ。linkでつなげてsetMainで関数渡してexecuteで実行する。
+  // 行列周りをmatで取得していじる形に変更、あとfactoryを引数に。
   class TransformTreeArray{
-    constructor(n=0){
-      this.factory = () => new TransformTree(); // とりあえずこれで。
+    constructor(n=0, factory = () => new TransformTree()){
+      this.factory = factory;
       this.tfs = [];
       for(let i=0; i<n; i++){ this.addTF(); }
       this.current = null;
@@ -3343,10 +3347,6 @@ const foxApplications = (function(){
       this.tfs[i].addChild(this.tfs[j]);
       return this;
     }
-    on(i){
-      this.current = this.tfs[i];
-      return this;
-    }
     setMain(func){
       this.current.setMain(func);
       return this;
@@ -3355,53 +3355,17 @@ const foxApplications = (function(){
       for(const tf of this.tfs){ tf.setMain(func); }
       return this;
     }
-    setJoint(m){
-      this.current.joint.set(m);
-      return this;
-    }
-    multJoint(m){
-      this.current.joint.multM(m);
-      return this;
-    }
-    jointI(){
-      this.current.joint.init();
-      return this;
-    }
-    jointT(){
-      this.current.joint.localTranslation(...arguments);
-      return this;
-    }
-    jointR(){
-      this.current.joint.localRotation(...arguments);
-      return this;
-    }
-    jointS(){
-      this.current.joint.localScale(...arguments);
-      return this;
-    }
-    setLocal(m){
-      this.current.local.set(m);
-      return this;
-    }
-    multLocal(m){
-      this.current.local.multM(m);
-      return this;
-    }
-    localI(){
-      this.current.local.init();
-      return this;
-    }
-    localT(){
-      this.current.local.localTranslation(...arguments);
-      return this;
-    }
-    localR(){
-      this.current.local.localRotation(...arguments);
-      return this;
-    }
-    localS(){
-      this.current.local.localScale(...arguments);
-      return this;
+    mat(i, type){
+      // 行列取得関数
+      switch(type){
+        case "joint":
+          return this.tfs[i].joint;
+        case "local":
+          return this.tfs[i].local;
+        case "model":
+          return this.tfs[i].model;
+      }
+      return null;
     }
     reset(){
       for(const tf of this.tfs){ tf.reset(); }
