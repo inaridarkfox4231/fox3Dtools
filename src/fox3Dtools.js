@@ -1907,6 +1907,10 @@ const fox3Dtools = (function(){
       // 成分を配列形式で返す
       return [this.w, this.x, this.y, this.z];
     }
+    init(){
+      // 性質的には行列なので、initがあってもいいと思う。
+      return this.set(1,0,0,0);
+    }
     mult(s = 1, immutable = false){
       // 定数倍
       if(immutable){
@@ -1964,11 +1968,13 @@ const fox3Dtools = (function(){
       this.z *= -1;
       return this;
     }
-    applyV(v){
+    applyV(){
+      // 引数はベクトルとは限らないため、仕様上imは無視する。常に新しいベクトル。
       // vに適用する。軸と角度。回転演算になる。
       // 具体的にはq * v * \bar{q} を計算してx,y,zを取るだけ。
+      const res = Vecta.validate(...arguments);
       const q = this.copy();
-      const vq = Quarternion.getFromV(v);
+      const vq = new Quarternion(0, res.x, res.y, res.z);
       const qConj = q.conj(true); // ここのqは変えちゃまずいのでtrueです。
       // qは変えちゃってOK
       q.multQ(vq).multQ(qConj);
@@ -2049,12 +2055,28 @@ const fox3Dtools = (function(){
       // 単位クォータニオンの場合は3本の軸ベクトルを順繰りに用意する関数になる。
       // 行列的にはこれらは列ベクトルで、配置的には転置となっている。
       // クォータニオンに3本の列ベクトルという別の姿があるイメージ。1to1ではないが。
+      // ax,ay,azでまとめてもいいが、手間なので別メソッドにしましょう。
       const {w,x,y,z} = this;
       return {
         x:new Vecta(2*w*w-1 + 2*x*x, 2*(x*y + z*w), 2*(x*z - y*w)),
         y:new Vecta(2*(x*y - z*w), 2*w*w-1 + 2*y*y, 2*(y*z + x*w)),
         z:new Vecta(2*(x*z + y*w), 2*(y*z - x*w), 2*w*w-1 + 2*z*z)
       }
+    }
+    ax(){
+      // 個別にx軸のベクトルが欲しい用
+      const {w,x,y,z} = this;
+      return new Vecta(2*w*w-1 + 2*x*x, 2*(x*y + z*w), 2*(x*z - y*w));
+    }
+    ay(){
+      // 個別にy軸のベクトルが欲しい用
+      const {w,x,y,z} = this;
+      return new Vecta(2*(x*y - z*w), 2*w*w-1 + 2*y*y, 2*(y*z + x*w));
+    }
+    az(){
+      // 個別にz軸のベクトルが欲しい用
+      const {w,x,y,z} = this;
+      return new Vecta(2*(x*z + y*w), 2*(y*z - x*w), 2*w*w-1 + 2*z*z);
     }
     static getFromAA(){
       // 軸の指定方法は3種類
