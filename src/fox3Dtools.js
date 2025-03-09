@@ -451,6 +451,11 @@ const foxUtils = (function(){
       this.connected = new RandomChoiceArray();
       this.branches = new SweepArray();
       this.tree = tree;
+      // ヒエラルキー用プロパティ。
+      // ヒエラルキーを作るたびにまとめて更新されるので特にリセットする必要は
+      // 無いと思う
+      this.parent = null;
+      this.parentBranch = null;
     }
     setTree(tree){
       this.tree = tree;
@@ -522,6 +527,8 @@ const foxUtils = (function(){
     static createHierarchy(nodeVertice){
       let curVertice = nodeVertice;
       curVertice.check();
+      curVertice.parent = null;
+      curVertice.parentBranch = null;
 
       let curDepth = 0;
 
@@ -550,6 +557,8 @@ const foxUtils = (function(){
           nextVertice.check();
 
           curVertice.tree.addChild(nextVertice.tree);
+          nextVertice.parent = curVertice;
+          nextVertice.parentBranch = branch;
 
           stuck.push(curVertice);
           curVertice = nextVertice;
@@ -566,6 +575,9 @@ const foxUtils = (function(){
       this.vertices = [v0, v1];
       v0.regist(this);
       v1.regist(this);
+    }
+    getVertices(){
+      return this.vertices;
     }
     getOppositeVertice(v){
       if(v === this.vertices[0]){
