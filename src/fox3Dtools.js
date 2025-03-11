@@ -366,6 +366,30 @@ const foxUtils = (function(){
     }
   }
 
+  // BooleanArray.
+  // 配列内のすべての要素に対するandやorを取れる
+  class BooleanArray extends ArrayWrapper{
+    constructor(){
+      super(...arguments);
+    }
+    all(func = () => true){
+      const args = [...arguments];
+      args.shift(0);
+      for(const a of this){
+        if(!func(a, ...args)) return false;
+      }
+      return true;
+    }
+    any(func = () => true){
+      const args = [...arguments];
+      args.shift(0);
+      for(const a of this){
+        if(func(a, ...args)) return true;
+      }
+      return false;
+    }
+  }
+
   // Tree.
   // 親はparentで子はSweepArrayで管理。要するに走査前提。ヒエラルキー前提。一応、depthも備えてある。
   // scanningのstatic関数があり、これを使って色々できる仕組み。
