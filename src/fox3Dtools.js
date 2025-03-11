@@ -3424,6 +3424,8 @@ const foxApplications = (function(){
           return this.tfs[i].local;
         case "model":
           return this.tfs[i].model;
+        case "global":
+          return this.tfs[i].global;
       }
       return null;
     }
