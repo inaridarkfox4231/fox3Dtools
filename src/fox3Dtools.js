@@ -3344,7 +3344,7 @@ const foxApplications = (function(){
   // jointは構成用のトランスフォームで、ローカルで間をいじることで変形を可能にする
   // さらに木構造なので組み立てができる
   // 最終的にscanningでglobalを計算し描画する
-  // mainに登録して描画も実行できる、ただbone-meshの場合は不要か（boneを描画したいなら別だけど）
+  // mainに登録して描画も実行できる、ただskin-meshの場合は不要か（boneを描画したいなら別だけど）
   // model行列を追加
   class TransformTree extends Tree{
     constructor(){
@@ -3353,6 +3353,9 @@ const foxApplications = (function(){
       this.local = new MT4();
       this.model = new MT4();
       this.global = new MT4();
+      this.position = new Vecta(); // weight計算に使う（いずれApplicationの方で用意するかも？）
+      // this.inverseBind = new MT4(); // skin-meshで使うbone行列の計算にこれを使う
+      // this.bone = new MT4(); // 通常のglobalに右からinverseBindを掛けて算出する
       this.main = () => {};
     }
     setMain(func){
@@ -3362,6 +3365,10 @@ const foxApplications = (function(){
     execute(){
       this.main(this);
       return this;
+    }
+    static computeInverseBind(nodeTree){
+      // localを考慮しないでglobalを計算し、その結果のglobalからpositionを決定し、
+      // さらに逆行列でinverseBindを決定する
     }
     static computeGlobal(nodeTree){
       const matStuck = [];
@@ -3416,18 +3423,7 @@ const foxApplications = (function(){
       return this;
     }
     mat(i, type){
-      // 行列取得関数
-      switch(type){
-        case "joint":
-          return this.tfs[i].joint;
-        case "local":
-          return this.tfs[i].local;
-        case "model":
-          return this.tfs[i].model;
-        case "global":
-          return this.tfs[i].global;
-      }
-      return null;
+      return this.tfs[i][type];
     }
     reset(){
       for(const tf of this.tfs){ tf.reset(); }
