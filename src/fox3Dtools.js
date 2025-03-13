@@ -3340,6 +3340,77 @@ const foxApplications = (function(){
     }
   }
 
+  // コンストラクタ
+  // 2D限定ですね
+  // 3Dでもいいんだろうか？？？3Dでもいいか。
+  // なおapplyBoneでベクトルを出しているがシェーダーでやる場合これは内部で計算する
+  // のでここではやらないですね
+  // setWeightまでですね。attrにぶちこむのは...あとで。
+  class WeightedVertice{
+    constructor(x, y, z=0){
+      this.v = new Vecta(x, y, z);
+      this.weight = [1,0,0,0];
+      this.joint = [0,0,0,0];
+      this.bone = null;
+    }
+    setBone(b){
+      this.bone = b;
+    }
+    setWeights(){
+      // jointとweightを...
+      const data = [];
+      for(let i=0; i<this.bone.tfs.length; i++){
+        // positionは事前に計算しておく
+        const p = this.bone.tfs[i].position;
+        data.push({index:i, d:Math.hypot(p.x - this.v.x, p.y - this.v.y)});
+      }
+      data.sort((d0, d1) => {
+        if(d0.d < d1.d) return -1;
+        if(d0.d > d1.d) return 1;
+        return 0;
+      });
+      let sum = 0;
+      // 申し訳程度のゼロ割対策
+      for(let i=0; i<4; i++){
+        if(i < data.length){
+          sum += 1/(data[i].d+1e-9);
+          this.joint[i] = data[i].index;
+        }else{
+          this.joint[i] = 0;
+        }
+      }
+      for(let i=0; i<4; i++){
+        if(i < data.length){
+          this.weight[i] = (1/data[i].d+1e-9)/sum;
+        }else{
+          this.weight[i] = 0;
+        }
+      }
+    }
+    getV(){
+      return this.v;
+    }
+    getWeight(){
+      return this.weight;
+    }
+    getJoint(){
+      return this.joint;
+    }
+    applyBone(){
+      // this.boneのbone行列を取り出して線形和を取る
+      const mats = [];
+      for(let i=0; i<4; i++){
+        const b = this.bone.mat(this.joint[i], "bone");
+        mats.push(b);
+      }
+      const result = new Vecta(0,0,0);
+      for(let i=0; i<4; i++){
+        result.addScalar(mats[i].multV(this.v, true), this.weight[i]);
+      }
+      return result;
+    }
+  }
+
   // Transform木
   // jointは構成用のトランスフォームで、ローカルで間をいじることで変形を可能にする
   // さらに木構造なので組み立てができる
@@ -3353,9 +3424,9 @@ const foxApplications = (function(){
       this.local = new MT4();
       this.model = new MT4();
       this.global = new MT4();
-      this.position = new Vecta(); // weight計算に使う（いずれApplicationの方で用意するかも？）
-      // this.inverseBind = new MT4(); // skin-meshで使うbone行列の計算にこれを使う
-      // this.bone = new MT4(); // 通常のglobalに右からinverseBindを掛けて算出する
+      this.position = new Vecta(); // weight計算に使う
+      this.inverseBind = new MT4(); // skin-meshで使うbone行列の計算にこれを使う
+      this.bone = new MT4(); // 通常のglobalに右からinverseBindを掛けて算出する
       this.main = () => {};
     }
     setMain(func){
@@ -3369,20 +3440,41 @@ const foxApplications = (function(){
     static computeInverseBind(nodeTree){
       // localを考慮しないでglobalを計算し、その結果のglobalからpositionを決定し、
       // さらに逆行列でinverseBindを決定する
+      const matStuck = [];
+      const curMat = new MT4();
+      // 初回訪問時にスタックに行列をとっておいて
+      // 現在の行列にjointを掛け算
+      // jointの累積が個々のbindMatrixになるんで
+      // そこからpositionを出すと同時に逆行列を取る感じ
+      // 最終訪問時（引き返す時）にスタックから行列を出す
+      Tree.scan(nodeTree, {
+        firstArrived:(t) => {
+          matStuck.push(curMat.copy());
+          curMat.multM(t.joint);
+          // ここでのcurMatが求めるglobalなので、
+          // これを元にpositionとinverseBindを計算する
+          curMat.multV(t.position.set(0,0,0));
+          t.inverseBind.set(curMat).invert();
+        },
+        lastArrived:(t) => {
+          curMat.set(matStuck.pop());
+        }
+      });
     }
     static computeGlobal(nodeTree){
       const matStuck = [];
       const curMat = new MT4();
       // 初回訪問時にスタックに行列をとっておいて
       // 現在の行列にjointとlocalを考慮させたうえで
-      // modelを加味して
-      // globalにセットする
+      // modelを加味してglobalにセットする
+      // さらにinverseBindも掛け算してskin-meshに使えるようにする
       // 最終訪問時（引き返す時）にスタックから行列を出す
       Tree.scan(nodeTree, {
         firstArrived:(t) => {
           matStuck.push(curMat.copy());
           curMat.multM(t.joint).multM(t.local);
           t.global.set(curMat).multM(t.model);
+          t.bone.set(t.global).multM(t.inverseBind);
         },
         lastArrived:(t) => {
           curMat.set(matStuck.pop());
@@ -3400,7 +3492,6 @@ const foxApplications = (function(){
       this.factory = factory;
       this.tfs = [];
       for(let i=0; i<n; i++){ this.addTF(); }
-      //this.current = null;
     }
     addTF(){
       this.tfs.push(this.factory());
@@ -3414,7 +3505,6 @@ const foxApplications = (function(){
       return this;
     }
     setMain(i, func){
-      //this.current.setMain(func);
       this.tfs[i].setMain(func);
       return this;
     }
@@ -3430,7 +3520,6 @@ const foxApplications = (function(){
       return this;
     }
     execute(i){
-      //this.current.execute();
       this.tfs[i].execute();
       return this;
     }
@@ -3441,6 +3530,7 @@ const foxApplications = (function(){
   }
 
   applications.CameraController = CameraController;
+  applications.WeightedVertice = WeightedVertice;
   applications.TransformTree = TransformTree;
   applications.TransformTreeArray = TransformTreeArray;
 
