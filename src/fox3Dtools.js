@@ -3737,7 +3737,7 @@ const foxApplications = (function(){
       for(let i=0; i<this.bone.tfs.length; i++){
         // positionは事前に計算しておく
         const p = this.bone.tfs[i].position;
-        data.push({index:i, d:Math.hypot(p.x - this.v.x, p.y - this.v.y)});
+        data.push({index:i, d:Math.hypot(p.x - this.v.x, p.y - this.v.y, p.z - this.v.z)});
       }
       data.sort((d0, d1) => {
         if(d0.d < d1.d) return -1;
