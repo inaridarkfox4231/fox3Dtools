@@ -1,3 +1,11 @@
+/*
+  今後の移植予定
+  Timer
+  FisceToyBoxのいろいろ
+  Geometry関連（v,n,fを基本とし、継承でUVやCOLORが扱えるようにする）
+  線もvとiだけで良くって必要なら色が追加できるようにすればいいだけ。
+*/
+
 // ------------------------------------------------------------------------------------------------------------------------------------------ //
 
 const webglUtils = (function(){
@@ -642,6 +650,362 @@ const foxUtils = (function(){
     return morton16(Math.min(a, b), Math.max(a, b));
   }
 
+  // TimerとCounterを同じクラスの継承で書いて、
+  // Scheduleを両方で使えるようにし、
+  // TimerでもCounterでもScheduleが作れるようにする
+  class Clock{
+    constructor(params = {}){
+      const {
+        delay = 0, zeroClump = true,
+        duration = Infinity, callback = () => {}
+      } = params;
+
+      this.delay = delay;
+      this.zeroClump = zeroClump;
+      this.duration = duration;
+      this.callback = callback;
+
+      this.elapsedStump = this.getCurrentTime() + this.delay;
+      this.isPause = false;
+    }
+    getCurrentTime(){
+      // Counterなら0, Timerならwindow.performance.now()とする
+      return 0;
+    }
+    setParams(params = {}){
+      const {
+        delay = this.delay, zeroClump = this.zeroClump,
+        duration = this.duration, callback = this.callback
+      } = params;
+
+      this.delay = delay;
+      this.zeroClump = zeroClump;
+      this.duration = duration;
+      this.callback = callback;
+      return this;
+    }
+    setElapsed(){
+      // elapsedTimeをその時点に固定しなおす。delay考慮。
+      this.elapsedStump = this.getCurrentTime() + this.delay;
+      return this;
+    }
+    getElapsed(){
+      return 0;
+    }
+    getProgress(){
+      return 0;
+    }
+    update(){
+      return false;
+    }
+    pause(){
+      return this;
+    }
+    start(){
+      return this;
+    }
+  }
+
+  class Timer extends Clock{
+    constructor(params = {}){
+      super(params);
+      const {timeScale = 1000} = params;
+      this.timeScale = timeScale;
+      this.deltaStump = this.getCurrentTime();
+      this.pauseStump = 0;
+    }
+    getCurrentTime(){
+      return window.performance.now();
+    }
+    setParams(params = {}){
+      super.setParams(params);
+      const {timeScale = this.timeScale} = params;
+      this.timeScale = timeScale;
+      return this;
+    }
+    getElapsedMillis(){
+      if(this.isPause){
+        if(this.zeroClump){
+          return Math.max(0, this.pauseStump - this.elapsedStump);
+        }
+        return this.pauseStump - this.elapsedStump;
+      }
+      if(this.zeroClump){
+        return Math.max(0, window.performance.now() - this.elapsedStump);
+      }
+      return window.performance.now() - this.elapsedStump;
+    }
+    getElapsed(){
+      // delayがある場合に0にしたければtrueを指定する。指定しない場合は負の数。
+      return this.getElapsedMillis() / this.timeScale;
+    }
+    getElapsedDiscrete(interval = 1000, modulo = 1){
+      const elapsed = this.getElapsedMillis();
+      const n = Math.floor(elapsed / interval);
+      if (modulo > 1) {
+        return n % modulo;
+      }
+      return n;
+    }
+    getProgress(){
+      // 進捗。durationはms指定。
+      const prg = this.getElapsedMillis() / this.duration;
+      return Math.min(1, prg);
+    }
+    update(){
+      if (this.isPause) return;
+      // thisを取る
+      const elapsedTime = this.getElapsedMillis();
+
+      if (elapsedTime > this.duration) {
+        // durationを超えたら更新
+        this.elapsedStump += this.duration;
+        // duration2個分とかだった場合、もう面倒なので「その時点」にしてしまおう
+        // たとえばBPMがクッソ速い場合
+        if (elapsedTime > 2*this.duration) {
+          this.elapsedStump = window.performance.now();
+        }
+        // なんかやらせたい場合。引数はthisのみ可。
+        this.callback(this);
+        return true;
+      }
+      return false;
+    }
+    getDeltaMillis(){
+      // 当然だが毎フレーム実行するなどしないと実質機能しない（当たり前か）
+      // p5だってこれ毎フレームやってるからね
+      if(this.isPause){
+        return 0;
+      }
+      // 最後にスタンプした瞬間との差分を記録
+      const delta = window.performance.now() - this.deltaStump;
+      // 直後にスタンプを押す（差分用の）
+      this.deltaStump = window.performance.now();
+      return delta;
+    }
+    getDelta(){
+      return this.getDeltaMillis() / this.timeScale;
+    }
+    pause(){
+      if (this.isPause) return; // 重ね掛け回避
+      this.isPause = true;
+      this.pauseStump = window.performance.now();
+      return this;
+    }
+    start(){
+      if (!this.isPause) return; // 重ね掛け回避
+      this.isPause = false;
+      this.elapsedStump += window.performance.now() - this.pauseStump;
+      this.deltaStump = window.performance.now();
+      return this;
+    }
+  }
+
+  class Counter extends Clock{
+    constructor(params = {}){
+      super(params);
+    }
+    getElapsed(){
+      if(this.zeroClump){
+        return Math.max(0, this.elapsedStump);
+      }
+      return this.elapsedStump;
+    }
+    getProgress(){
+      return this.getElapsed()/this.duration;
+    }
+    update(){
+      if (this.isPause) return;
+
+      this.elapsedStump++;
+      if(this.elapsedStump === this.duration){
+        this.callback(this);
+        this.elapsedStump = 0;
+        return true;
+      }
+      return false;
+    }
+    pause(){
+      if (this.isPause) return; // 重ね掛け回避
+      this.isPause = true;
+      return this;
+    }
+    start(){
+      if (!this.isPause) return; // 重ね掛け回避
+      this.isPause = false;
+      return this;
+    }
+  }
+
+  // 複数のClockをまとめて扱う仕組み
+  class ClockSet{
+    constructor(data = {}){
+      this.clocks = {};
+      for(const name of Object.keys(data)){
+        this.createClock(name, data[name]);
+      }
+    }
+    createClock(name = "default", params = {}){
+      this.clocks[name] = this.clockFactory(params);
+      return this;
+    }
+    clockFactory(params = {}){
+      return new Clock(params);
+    }
+    clock(name){
+      return this.clocks[name];
+    }
+    executeAll(methodName){
+      for(const name of Object.keys(this.clocks)){
+        this.clocks[name][methodName]();
+      }
+      return this;
+    }
+  }
+
+  class TimerSet extends ClockSet{
+    constructor(data = {}){
+      super(data);
+    }
+    clockFactory(params = {}){
+      return new Timer(params);
+    }
+  }
+  class CounterSet extends ClockSet{
+    constructor(data = {}){
+      super(data);
+    }
+    clockFactory(params = {}){
+      return new Counter(params);
+    }
+  }
+
+  // Clockを対象とする形で一般化したい
+  class Schedule{
+    constructor(params = {}){
+      const {
+        durations = [], actions = [], callbacks = [], clockParams = {},
+        loopCount = Infinity
+      } = params;
+      this.clock = this.clockFactory(clockParams);
+      this.durationSweep = new SweepArray();
+      for(let i=0; i<durations.length; i++){
+        if(i===0){
+          this.durationSweep.push(durations[0]);
+        }else{
+          this.durationSweep.push(durations[i] - durations[i-1]);
+        }
+      }
+
+      this.actionSweep = new SweepArray();
+      for(let i=0; i<actions.length; i++){
+        this.actionSweep.push((actions[i] !== null ? actions[i] : Schedule.nullFunction));
+      }
+      this.action = (r) => {};
+
+      this.callbackSweep = new SweepArray();
+      for(let i=0; i<callbacks.length; i++){
+        this.callbackSweep.push((callbacks[i] !== null ? callbacks[i] : Schedule.nullFunction));
+      }
+      this.callback = (t) => {};
+
+      this.loopCount = loopCount;
+      this.currentLoopCount = 0;
+      this.isFinished = true;
+      this.isPause = true;
+    }
+    clockFactory(params = {}){
+      return new Clock(params);
+    }
+    initialize(){
+      this.durationSweep.reset();
+      this.actionSweep.reset();
+      this.callbackSweep.reset();
+      this.clock.setElapsed();
+      this.clock.setParams({
+        duration:this.durationSweep.pick(),
+        callback: () => { this.updateSchedule(); }
+      });
+      this.action = this.actionSweep.pick(); // 次のタイミングまでにやること
+      this.callback = this.callbackSweep.pick(); // 境目でやること
+      this.isFinished = false; // カウントだけ実行したら終わる
+      this.isPause = false;
+      this.currentLoopCount = 0;
+    }
+    updateSchedule(){
+      // callbackとactionは自動的に最初に戻る
+      this.callback(this.clock);
+      const nextCallback = this.callbackSweep.pick();
+      if(nextCallback !== null){
+        this.callback = nextCallback;
+      }else{
+        this.callbackSweep.reset();
+        this.callback = this.callbackSweep.pick();
+      }
+
+      const nextAction = this.actionSweep.pick();
+      if(nextAction !== null){
+        this.action = nextAction;
+      }else{
+        this.actionSweep.reset();
+        this.action = this.actionSweep.pick();
+      }
+
+      // durationはゴールまで来たらcurrentLoopCountを1つ増やして
+      // loopCountに達したらfinish, そうでないならresetして戻す
+      const nextDuration = this.durationSweep.pick();
+      if(nextDuration !== null){
+        this.clock.setParams({duration:nextDuration});
+      }else{
+        this.currentLoopCount++;
+        if(this.currentLoopCount < this.loopCount){
+          this.durationSweep.reset();
+          this.clock.setParams({duration:this.durationSweep.pick()});
+        }else{
+          this.isFinished = true;
+        }
+      }
+    }
+    update(){
+      if(this.isPause) return;
+      if(this.isFinished) return; // finishしたらやらない。
+
+      const prg = this.clock.getProgress();
+      this.action(prg);
+      this.clock.update();
+    }
+    pause(){
+      if(this.isPause)return;
+      this.clock.pause();
+      this.isPause = true;
+    }
+    start(){
+      if(!this.isPause)return;
+      this.clock.start();
+      this.isPause = false;
+    }
+  }
+
+  Schedule.nullFunction = () => {};
+
+  class ScheduledTimer extends Schedule{
+    constructor(params = {}){
+      super(params);
+    }
+    clockFactory(params = {}){
+      return new Timer(params);
+    }
+  }
+
+  class ScheduledCounter extends Schedule{
+    constructor(params = {}){
+      super(params);
+    }
+    clockFactory(params = {}){
+      return new Counter(params);
+    }
+  }
+
   utils.Damper = Damper;
 
   utils.ArrayWrapper = ArrayWrapper;
@@ -656,6 +1020,17 @@ const foxUtils = (function(){
 
   utils.morton16 = morton16; // 16bit符号なし整数の対を単整数と紐付ける。
   utils.morton16Symmetry = morton16Symmetry;
+
+  // Clock関連
+  utils.Clock = Clock;
+  utils.Timer = Timer;
+  utils.Counter = Counter;
+  utils.ClockSet = ClockSet;
+  utils.TimerSet = TimerSet;
+  utils.CounterSet = CounterSet;
+  utils.Schedule = Schedule;
+  utils.ScheduledTimer = ScheduledTimer;
+  utils.ScheduledCounter = ScheduledCounter;
 
   return utils;
 })();
