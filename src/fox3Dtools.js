@@ -2,8 +2,7 @@
   今後の移植予定
   Timer
   FisceToyBoxのいろいろ
-  Geometry関連（v,n,fを基本とし、継承でUVやCOLORが扱えるようにする）
-  線もvとiだけで良くって必要なら色が追加できるようにすればいいだけ。
+  Geometry関連(v,n,f,あとはoptionでc,uv,l)
 */
 
 // ------------------------------------------------------------------------------------------------------------------------------------------ //
@@ -175,6 +174,7 @@ const foxUtils = (function(){
   // 加算する際のfactorを決めることができるし上限値と下限値も決められる。これらは速度に当たる。要はactionとはapplyForceである。
   // setMainでそれらの値で何をするのかを登録し(this引数)、executeで毎フレーム実行する。updateは個別の処理だが
   // applyAllでまとめて指定することもできる。pause/startで一時的に値の更新や減衰が起きないようにできる。
+  // isActive()でいずれかのdamperがvalue0かどうか調べられる。falseなら全部0ということ。
   class Damper{
     constructor(){
       this.dampers = {};
@@ -285,6 +285,13 @@ const foxUtils = (function(){
         }
       }
       return this;
+    }
+    isActive(){
+      for(const name of Object.keys(this.dampers)){
+        const damp = this.dampers[name];
+        if(Math.abs(damp.value) > 0) return true;
+      }
+      return false;
     }
   }
 
@@ -3597,6 +3604,8 @@ const foxApplications = (function(){
   const {Interaction} = foxIA;
   const {Vecta, MT4} = fox3Dtools;
 
+  // isActiveを追加。カメラが動いてるときだけ更新するなどの用途がある。
+  // configも追加。操作性をいじるための機能。actionCoeffを変更できる。デフォルトは1. thresholdも0.01とかでいいかもだしな。
   class CameraController extends Interaction{
     constructor(canvas, options = {}, params = {}){
       super(canvas, options);
@@ -3712,6 +3721,14 @@ const foxApplications = (function(){
       // 平行移動
       this.dmp.action("translationX", dx * this.touchTranslationFactor);
       this.dmp.action("translationY", dy * this.touchTranslationFactor);
+    }
+    config(name, params = {}){
+      // nameの候補："rotationX", "rotationY", "scale", "translationX", "translationY"
+      // たとえばscaleをいじるなら CC.config("scale",{threshold:0.1}); とかする
+      this.dmp.config(name, params);
+    }
+    isActive(){
+      return this.dmp.isActive();
     }
   }
 
