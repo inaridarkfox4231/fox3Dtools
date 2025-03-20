@@ -3621,6 +3621,9 @@ const foxApplications = (function(){
       this.lowerBound = 0.01;
       this.rotationMode = "free"; // none, free, axis
 
+      this.rotationMouseButton = 0; // マウスで操作する場合の回転に使うボタン（デフォルト左）
+      this.translationMouseButton = 2; // マウスで操作する場合の平行移動に使うボタン（デフォルト右）
+
       this.setParam(params);
 
       this.cam = cam;
@@ -3667,7 +3670,15 @@ const foxApplications = (function(){
       this.cam.rotateCenterFixed(rotationAxis, angle);
     }
     setParam(params = {}){
+      // おかしなものをいじられないようにする. dmpとかいじられるとまずいので。
+      const paramList = [
+        "mouseScaleFactor", "mouseRotationFactor", "mouseTranslationFactor",
+        "touchScaleFactor", "touchRotationFactor", "touchTranslationFactor",
+        "topAxis", "upperBound", "lowerBound", "rotationMode",
+        "rotationMouseButton", "translationMouseButton"
+      ];
       for(const param of Object.keys(params)){
+        if (paramList.indexOf(param) < 0) continue;
         this[param] = params[param];
       }
     }
@@ -3688,11 +3699,11 @@ const foxApplications = (function(){
       // 回転・平行移動
       if(this.pointers.length === 0) return;
       const btn = this.pointers[0].button;
-      if(btn === 0){
+      if(btn === this.rotationMouseButton){
         // 左の場合
         this.dmp.action("rotationX", dx * this.mouseRotationFactor);
         this.dmp.action("rotationY", dy * this.mouseRotationFactor);
-      }else if(btn === 2){
+      }else if(btn === this.translationMouseButton){
         // 右の場合
         this.dmp.action("translationX", dx * this.mouseTranslationFactor);
         this.dmp.action("translationY", dy * this.mouseTranslationFactor);
