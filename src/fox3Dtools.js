@@ -3,6 +3,10 @@
   Timer
   FisceToyBoxのいろいろ
   Geometry関連(v,n,f,あとはoptionでc,uv,l)
+
+  板ポリ芸やライティング、shaderの改変機構、テクスチャも整備しないといけないですね。
+  テクスチャはもう関数使ってるからな。移すのは難しくないと思う。
+  VAO生成機構も基本的なものは一応すでに用意してある、には、あるけど、柔軟性考えるとな～
 */
 
 // ------------------------------------------------------------------------------------------------------------------------------------------ //
@@ -672,12 +676,7 @@ const foxUtils = (function(){
       this.duration = duration;
       this.callback = callback;
 
-      this.elapsedStump = this.getCurrentTime() + this.delay;
       this.isPause = false;
-    }
-    getCurrentTime(){
-      // Counterなら0, Timerならwindow.performance.now()とする
-      return 0;
     }
     setParams(params = {}){
       const {
@@ -691,18 +690,13 @@ const foxUtils = (function(){
       this.callback = callback;
       return this;
     }
-    setElapsed(){
-      // elapsedTimeをその時点に固定しなおす。delay考慮。
-      this.elapsedStump = this.getCurrentTime() + this.delay;
-      return this;
-    }
     getElapsed(){
       return 0;
     }
     getProgress(){
       return 0;
     }
-    update(){
+    update(forceUpdate = false){
       return false;
     }
     pause(){
@@ -713,16 +707,19 @@ const foxUtils = (function(){
     }
   }
 
-  class Timer extends Clock{
+
+  class TimeArrow extends Clock{
     constructor(params = {}){
       super(params);
+      this.elapsedStump = window.performance.now() + this.delay;
       const {timeScale = 1000} = params;
       this.timeScale = timeScale;
-      this.deltaStump = this.getCurrentTime();
+      this.deltaStump = window.performance.now();
       this.pauseStump = 0;
     }
-    getCurrentTime(){
-      return window.performance.now();
+    setElapsed(){
+      this.elapsedStump = window.performance.now() + this.delay;
+      return this;
     }
     setParams(params = {}){
       super.setParams(params);
@@ -759,18 +756,24 @@ const foxUtils = (function(){
       const prg = this.getElapsedMillis() / this.duration;
       return Math.min(1, prg);
     }
-    update(){
+    update(forceUpdate = false){
       if (this.isPause) return;
       // thisを取る
       const elapsedTime = this.getElapsedMillis();
 
-      if (elapsedTime > this.duration) {
-        // durationを超えたら更新
-        this.elapsedStump += this.duration;
-        // duration2個分とかだった場合、もう面倒なので「その時点」にしてしまおう
-        // たとえばBPMがクッソ速い場合
-        if (elapsedTime > 2*this.duration) {
+      if ((elapsedTime > this.duration) || forceUpdate) {
+        if(!forceUpdate){
+          // durationを超えたら更新
+          this.elapsedStump += this.duration;
+          // duration2個分とかだった場合、もう面倒なので「その時点」にしてしまおう
+          // たとえばBPMがクッソ速い場合
+          if (elapsedTime > 2*this.duration) {
+            this.elapsedStump = window.performance.now();
+          }
+        }else{
+          // forceUpdateの場合は
           this.elapsedStump = window.performance.now();
+          // でいいですね。
         }
         // なんかやらせたい場合。引数はthisのみ可。
         this.callback(this);
@@ -811,6 +814,11 @@ const foxUtils = (function(){
   class Counter extends Clock{
     constructor(params = {}){
       super(params);
+      this.elapsedStump = -this.delay; // マイナス！
+    }
+    setElapsed(){
+      this.elapsedStump = -this.delay;
+      return this;
     }
     getElapsed(){
       if(this.zeroClump){
@@ -821,11 +829,12 @@ const foxUtils = (function(){
     getProgress(){
       return this.getElapsed()/this.duration;
     }
-    update(){
+    update(forceUpdate = false){
       if (this.isPause) return;
 
       this.elapsedStump++;
-      if(this.elapsedStump === this.duration){
+      // forceUpdateがあると強制的に次に行く。elapsedStumpも0になる。はい。
+      if((this.elapsedStump === this.duration) || forceUpdate){
         this.callback(this);
         this.elapsedStump = 0;
         return true;
@@ -870,12 +879,12 @@ const foxUtils = (function(){
     }
   }
 
-  class TimerSet extends ClockSet{
+  class TimeArrowSet extends ClockSet{
     constructor(data = {}){
       super(data);
     }
     clockFactory(params = {}){
-      return new Timer(params);
+      return new TimeArrow(params);
     }
   }
   class CounterSet extends ClockSet{
@@ -891,33 +900,49 @@ const foxUtils = (function(){
   class Schedule{
     constructor(params = {}){
       const {
-        durations = [], actions = [], callbacks = [], clockParams = {},
-        loopCount = Infinity
+        durations = [], actions = [], callbacks = [], loopers = [],
+        clockParams = {}
       } = params;
       this.clock = this.clockFactory(clockParams);
-      this.durationSweep = new SweepArray();
-      for(let i=0; i<durations.length; i++){
-        if(i===0){
-          this.durationSweep.push(durations[0]);
+
+      this.durations = durations.slice(); // 複製する。これの長さが基準となる。
+      const L = this.durations.length; // 全体の長さ
+
+      this.currentIndex = 0; // index制御にする
+
+      this.status = new Array(L);
+
+      // fillをobjectで使うと全部一緒になってしまうので注意
+      for(let i=0; i<L; i++){
+        this.status[i] = {action:null, callback:null, looper:null};
+      }
+
+      const setStatus = (statusName, src, statusLength, defaultValue) => {
+        if(Array.isArray(src)){
+          for(let i=0; i<Math.min(statusLength, src.length); i++){
+            this.status[i][statusName] = src[i];
+          }
         }else{
-          this.durationSweep.push(durations[i] - durations[i-1]);
+          // {'3':~~, '7':~~} のような書き方を許す。その場合配列ではない。
+          for(const eachIndex of Object.keys(src)){
+            this.status[eachIndex][statusName] = src[eachIndex];
+          }
+        }
+        for(let i=0; i<statusLength; i++){
+          if(this.status[i][statusName] === null){
+            this.status[i][statusName] = defaultValue;
+          }
         }
       }
+      setStatus("action", actions, L, Schedule.nullFunction);
+      setStatus("callback", callbacks, L, Schedule.nullFunction);
+      setStatus("looper", loopers, L, {back:0, forward:0, count:1});
 
-      this.actionSweep = new SweepArray();
-      for(let i=0; i<actions.length; i++){
-        this.actionSweep.push((actions[i] !== null ? actions[i] : Schedule.nullFunction));
-      }
-      this.action = (r) => {};
+      // loopCountは別で管理する
+      this.loopCounts = new Array(L);
+      this.loopCounts.fill(0);
 
-      this.callbackSweep = new SweepArray();
-      for(let i=0; i<callbacks.length; i++){
-        this.callbackSweep.push((callbacks[i] !== null ? callbacks[i] : Schedule.nullFunction));
-      }
-      this.callback = (t) => {};
-
-      this.loopCount = loopCount;
-      this.currentLoopCount = 0;
+      // ひとつでいいや
       this.isFinished = true;
       this.isPause = true;
     }
@@ -925,61 +950,72 @@ const foxUtils = (function(){
       return new Clock(params);
     }
     initialize(){
-      this.durationSweep.reset();
-      this.actionSweep.reset();
-      this.callbackSweep.reset();
+      this.currentIndex = 0;
+
       this.clock.setElapsed();
       this.clock.setParams({
-        duration:this.durationSweep.pick(),
+        duration:this.durations[this.currentIndex],
         callback: () => { this.updateSchedule(); }
       });
-      this.action = this.actionSweep.pick(); // 次のタイミングまでにやること
-      this.callback = this.callbackSweep.pick(); // 境目でやること
+
       this.isFinished = false; // カウントだけ実行したら終わる
       this.isPause = false;
-      this.currentLoopCount = 0;
+
+      this.loopCounts.fill(0); // すべて0で初期化
     }
     updateSchedule(){
       // callbackとactionは自動的に最初に戻る
-      this.callback(this.clock);
-      const nextCallback = this.callbackSweep.pick();
-      if(nextCallback !== null){
-        this.callback = nextCallback;
-      }else{
-        this.callbackSweep.reset();
-        this.callback = this.callbackSweep.pick();
-      }
+      // callbackがtrueを返す場合はループを切る（forwardを採用する）
 
-      const nextAction = this.actionSweep.pick();
-      if(nextAction !== null){
-        this.action = nextAction;
-      }else{
-        this.actionSweep.reset();
-        this.action = this.actionSweep.pick();
-      }
+      const {callback, looper} = this.status[this.currentIndex];
 
-      // durationはゴールまで来たらcurrentLoopCountを1つ増やして
-      // loopCountに達したらfinish, そうでないならresetして戻す
-      const nextDuration = this.durationSweep.pick();
-      if(nextDuration !== null){
-        this.clock.setParams({duration:nextDuration});
-      }else{
-        this.currentLoopCount++;
-        if(this.currentLoopCount < this.loopCount){
-          this.durationSweep.reset();
-          this.clock.setParams({duration:this.durationSweep.pick()});
+      // ここで既定値を決めておけばundefinedの場合はこれらが使われる。
+      // 何が言いたいかというとforwardに0以外を指定するケースはほぼ無い。
+      // あったら困るので用意するけど。
+      const {back = 0, forward = 0, count = 1} = looper;
+      const loopBreak = callback(this.clock);
+
+      this.loopCounts[this.currentIndex]++;
+      // loopBreakの場合は強制的に抜ける
+      if((this.loopCounts[this.currentIndex] === count) || loopBreak){
+        this.loopCounts[this.currentIndex] = 0;
+
+        if(typeof forward === 'number'){
+          this.currentIndex += (1+forward);
+        }else if(typeof forward === 'function'){
+          this.currentIndex += (1+forward());
         }else{
+          this.currentIndex++;
+        }
+
+        // もしdurationsの長さに到達したなら終了する
+        if(this.currentIndex === this.durations.length){
           this.isFinished = true;
+          return;
+        }
+      }else{
+        // 戻る場合。たとえばback:-1なら同じ内容を繰り返す。
+        if(typeof back === 'number'){
+          this.currentIndex += (1+back);
+        }else if(typeof back === 'function'){
+          this.currentIndex += (1+back());
+        }else{
+          this.currentIndex++;
         }
       }
+
+      // あとはdurationを更新するだけ
+      this.clock.setParams({duration:this.durations[this.currentIndex]});
     }
     update(){
       if(this.isPause) return;
       if(this.isFinished) return; // finishしたらやらない。
 
       const prg = this.clock.getProgress();
-      this.action(prg);
-      this.clock.update();
+      // actionの戻り値がtrueの場合はforceUpdateを実行する
+      const action = this.status[this.currentIndex].action;
+      const forceUpdate = action(prg);
+      this.clock.update(forceUpdate);
     }
     pause(){
       if(this.isPause)return;
@@ -995,12 +1031,12 @@ const foxUtils = (function(){
 
   Schedule.nullFunction = () => {};
 
-  class ScheduledTimer extends Schedule{
+  class ScheduledTimeArrow extends Schedule{
     constructor(params = {}){
       super(params);
     }
     clockFactory(params = {}){
-      return new Timer(params);
+      return new TimeArrow(params);
     }
   }
 
@@ -1030,13 +1066,13 @@ const foxUtils = (function(){
 
   // Clock関連
   utils.Clock = Clock;
-  utils.Timer = Timer;
+  utils.TimeArrow = TimeArrow;
   utils.Counter = Counter;
   utils.ClockSet = ClockSet;
-  utils.TimerSet = TimerSet;
+  utils.TimeArrowSet = TimeArrowSet;
   utils.CounterSet = CounterSet;
   utils.Schedule = Schedule;
-  utils.ScheduledTimer = ScheduledTimer;
+  utils.ScheduledTimeArrow = ScheduledTimeArrow;
   utils.ScheduledCounter = ScheduledCounter;
 
   return utils;
