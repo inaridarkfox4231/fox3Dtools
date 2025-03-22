@@ -469,11 +469,13 @@ const foxUtils = (function(){
           // nextTreeがnullというのは要するにどんづまりなので、
           // 結果に依らずこのときのcurTreeはresetしていいと思う
           curTree.reset();
+          lastArrived(curTree); // こっちのような気がするし、多分そう。
+          // lastArrivedの方はskin-meshにも出てこないし問題ないはず
           if(stuck.length === 0){
             break;
           }else{
             // 最後に到達したときになんかやりたい
-            lastArrived(curTree);
+            //lastArrived(curTree);
             curTree = stuck.pop();
           }
         }else{
