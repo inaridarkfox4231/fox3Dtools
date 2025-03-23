@@ -1051,6 +1051,175 @@ const foxUtils = (function(){
     }
   }
 
+  // Easing.
+  // 基本10種のeaseIn,easeOut,easeInOutがデフォルト、それに加えてlinear,zero,one合計33
+  // に加えて、カスタム機能も整備
+  // 好きに関数をカスタマイズして名前を付けて再利用できる
+  // loop,reverse,reverseLoop,clampの4種類
+  // 関数を直接ほしい場合はget,適用したいだけならapplyと、使い分けられる。
+  class Easing{
+    constructor(){
+      this.funcs = {};
+      this.initialize();
+    }
+    initialize(){
+      this.regist("linear", x => x); // これは特別。
+
+      // まずSineとかQuadのInバージョンを作り...
+      // funcs.easeIn~~~はそのまま
+      // funcs.easeOut~~~はそれを加工
+      // funcs.easeInOut~~~も別の手法で加工
+      // 一通りできたらそれをさらに加工してRevを作る流れ。
+      const baseFuncs = {};
+      baseFuncs.Sine = x => 1-Math.cos(0.5*Math.PI*x);
+      baseFuncs.Quad = x => x*x;
+      baseFuncs.Cubic = x => x*x*x;
+      baseFuncs.Quart = x => x*x*x*x;
+      baseFuncs.Quint = x => x*x*x*x*x;
+      baseFuncs.Expo = x => (x > 0 ? Math.pow(2, 10*(x-1)) : 0);
+      baseFuncs.Circ = x => 1-Math.sqrt(1-x*x);
+      baseFuncs.Back = x => 2.7*x*x*x - 1.7*x*x;
+      baseFuncs.Elastic = x => {
+        if(x>0 && x<1){
+          const c4 = (2 * Math.PI) / 3;
+          return -Math.pow(2, 10 * x - 10) * Math.sin((x * 10 - 10.75) * c4);
+        }
+        if(x>0){ return 1; }
+        return 0;
+      }
+      const easeOutBounce = x => {
+        const n1 = 7.5625;
+        const d1 = 2.75;
+        if(x < 1 / d1){
+          return n1 * x * x;
+        }else if (x < 2 / d1){
+          return n1 * (x -= 1.5 / d1) * x + 0.75;
+        }else if (x < 2.5 / d1){
+          return n1 * (x -= 2.25 / d1) * x + 0.9375;
+        }
+        return n1 * (x -= 2.625 / d1) * x + 0.984375;
+      }
+      baseFuncs.Bounce = x => 1-easeOutBounce(1-x);
+      for(let funcName of Object.keys(baseFuncs)){
+        const f = baseFuncs[funcName];
+        this.regist("easeIn"+funcName, f);
+        this.regist("easeOut"+funcName, (x => 1-f(1-x)));
+        this.regist("easeInOut"+funcName, (x => (x < 0.5 ? 0.5*f(2*x) : 1-0.5*f(2*(1-x)))));
+      }
+      this.regist("zero", (x => 0));
+      this.regist("one", (x => 1));
+    }
+    regist(name, func){
+      if (typeof func === "function") {
+        // 関数の場合は直接。
+        this.funcs[name] = func;
+        return;
+      }
+      // パラメータ指定
+      this.funcs[name] = this.compositeMulti(func);
+    }
+    get(name){
+      // 関数が欲しい場合
+      return this.funcs[name];
+    }
+    apply(name, value){
+      // 直接値が欲しい場合
+      return this.funcs[name](value);
+    }
+    parseFunc(f){
+      if (typeof f === "string") {
+        if (typeof this.funcs[f] === "function") {
+          return this.funcs[f];
+        }
+      }
+      if (typeof f === "function") return f;
+      // 未定義の場合はlinearが返る
+      return x => x;
+    }
+    toClamp(f){
+      return Easing.toClamp(this.parseFunc(f));
+    }
+    toLoop(f){
+      return Easing.toLoop(this.parseFunc(f));
+    }
+    toReverseLoop(f){
+      return Easing.toReverseLoop(this.parseFunc(f));
+    }
+    toReverse(f){
+      return Easing.toReverse(this.parseFunc(f));
+    }
+    compositeMulti(params = {}){
+      const {f = [x=>x]} = params;
+      for(let k=0; k<f.length; k++){
+        f[k] = this.parseFunc(f[k]);
+      }
+      return Easing.compositeMulti(params);
+    }
+    static toClamp(f){
+      // 0～1でclampする
+      return (x) => f(Math.max(0, Math.min(1, x)));
+    }
+    static toLoop(f){
+      // 元の0～1の関数を延々と
+      return (x) => f(((x % 1) + 1) % 1);
+    }
+    static toReverseLoop(f){
+      // 元の0～1から0～1～0～1～...
+      // 元の関数をForwardBackしたものをLoopしたもの
+      return (x) => {
+        const t = (((x/2) % 1) + 1) % 1;
+        if (t < 0.5) return f(2*t);
+        return f(2-2*t);
+      }
+    }
+    static toReverse(f){
+      // 1～0にするだけ
+      return (x) => f(1-x);
+    }
+    static composite(f, g, t, v){
+      // 0～tでf, t～1でgという関数を作る。
+      // 取る値はf,gともに0～1を想定しており
+      // 途中でvになって最後が1ですね
+      return (x) => {
+        if (x < t) return f(x/t) * v;
+        return v + (1-v)*g((x-t)/(1-t));
+      }
+    }
+    static compositeMulti(params = {}){
+      // 関数列fの長さをNとすると
+      // 時間間隔列tは長さN+1で値の列vも長さN+1を想定
+      // tは0から1までの間を単調増加で指定
+      // vはそれに対応するように値を用意する
+      // f,t,vから0～1に対し値を返す関数を作る
+      // 各々のfは0～1ベースの関数であることが想定されている
+      // 取る値の範囲も0～1になっているかどうかは問わない（ずっと0とかでもいい）
+      // 整合性が取れるかどうかはvの指定次第
+      const {f = [x=>x], t = [0,1], v = [0,1]} = params;
+      const {loopType = "clamp"} = params;
+      const resultFunction = (x) => {
+        //x = clamp(x, 0, 1); // optionで選べるようにするかも？
+        for(let k=1; k<t.length; k++){
+          if (x < t[k]){
+            const factor = f[k-1]((x - t[k-1]) / (t[k] - t[k-1]));
+            return v[k-1] + (v[k] - v[k-1]) * factor;
+          }
+        }
+        return v[v.length - 1]; // xが1の場合
+      }
+      switch(loopType){
+        case "clamp":
+          return Easing.toClamp(resultFunction);
+        case "loop":
+          return Easing.toLoop(resultFunction);
+        case "reverseLoop":
+          return Easing.toReverseLoop(resultFunction);
+        case "reverse":
+          return Easing.toReverse(resultFunction);
+      }
+      return resultFunction;
+    }
+  }
+
   utils.Damper = Damper;
 
   utils.ArrayWrapper = ArrayWrapper;
@@ -1076,6 +1245,9 @@ const foxUtils = (function(){
   utils.Schedule = Schedule;
   utils.ScheduledTimeArrow = ScheduledTimeArrow;
   utils.ScheduledCounter = ScheduledCounter;
+
+  // Easing.
+  utils.Easing = Easing;
 
   return utils;
 })();
