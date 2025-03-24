@@ -387,6 +387,7 @@ const foxUtils = (function(){
 
   // BooleanArray.
   // 配列内のすべての要素に対するandやorを取れる
+  // staticを使うと他の配列に適用できる（iterableなら何でもOK）
   class BooleanArray extends ArrayWrapper{
     constructor(){
       super(...arguments);
@@ -403,6 +404,22 @@ const foxUtils = (function(){
       const args = [...arguments];
       args.shift(0);
       for(const a of this){
+        if(func(a, ...args)) return true;
+      }
+      return false;
+    }
+    static all(array, func = () => true){
+      const args = [...arguments];
+      args.shift(0).shift(0);
+      for(const a of array){
+        if(!func(a, ...args)) return false;
+      }
+      return true;
+    }
+    static any(array, func = () => true){
+      const args = [...arguments];
+      args.shift(0).shift(0);
+      for(const a of array){
         if(func(a, ...args)) return true;
       }
       return false;
