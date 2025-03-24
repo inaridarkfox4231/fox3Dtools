@@ -1237,6 +1237,94 @@ const foxUtils = (function(){
     }
   }
 
+  // 使い方
+  // コンストラクタで{name:url}もしくは{name:{url:~~,callback:~~}}という形で入れる
+  // 通常はname:urlという形でいい
+  // load(name)でロードされる。callbackが実行される。callbackを入れておくときちんとロードされた場合しか
+  // 実行されない。loadAllについてはnamesの内容をすべてload出来た場合だけcallbackが実行される。
+  // isLoaded(name)とisLoadedAll(names)で確認できる
+  // getImageとgetImageAllでimgをgetできる。無い場合はnull.
+  // registで上書きもできる。同じ名前を使いまわしてもいい。
+  // というか「.regist(name,url);」というカジュアルな使い方でもいい。「.regist(name,{url:~~,callback:~~}).load(name)」とか。
+  class ImageLoader{
+    constructor(data = {}){
+      this.loaders = {};
+      for(const name of Object.keys(data)){
+        this.regist(name, data[name]);
+      }
+    }
+    regist(name, params = {}){
+      if(typeof params === 'string'){
+        this.regist(name, {url:params});
+        return this;
+      }
+      const {url, callback = (img) => {}} = params;
+      this.loaders[name] = {url, callback, loaded:false, img:null};
+      return this;
+    }
+    load(name){
+      const loader = this.loaders[name];
+      const {url, callback} = loader;
+      const promise = ImageLoader.getImageData(url);
+      promise.then((img) => {
+        if(img instanceof HTMLImageElement){
+          console.log(`${name} is loaded.`);
+          loader.img = img;
+          loader.loaded = true; // ロードに成功した場合
+          callback(img);
+        }
+      });
+      // 戻り値をPromiseにする。
+      return promise;
+    }
+    loadAll(names, callback = (imgs) => {}){
+      const promises = names.map((name) => this.load(name));
+      return Promise.all(promises).then((imgs) => {
+        // loadに失敗した場合はそのようなloaderをひとつだけ指摘してスルー
+        for(const name of names){
+          if(!this.isLoaded(name)){
+            console.log(`${name} cannot loaded...`);
+            return;
+          }
+        }
+        callback(imgs);
+      });
+    }
+    isLoaded(name){
+      return this.loaders[name].loaded;
+    }
+    isLoadedAll(names){
+      for(const name of names){
+        if(!this.loaders[name].loaded) return false;
+      }
+      return true;
+    }
+    getImage(name){
+      return this.loaders[name].img;
+    }
+    getImageAll(names){
+      const result = {};
+      for(const name of names){ result[name] = this.getImage(name); }
+      return result;
+    }
+    static async getImageData(url){
+      try{
+        const response = await fetch(url);
+        if(!response.ok){
+          throw new Error(`response.status: ${response.status}`);
+        }
+        const blob = await response.blob();
+        const dlurl = URL.createObjectURL(blob)
+        const img = new Image(); // HTMLImageElementのコンストラクタ
+        img.src = dlurl;
+        await img.decode(); // HTMLImageElementなのでdecode()
+        return img;
+      }catch(error){
+        console.error(`error message: ${error.message}`);
+      }
+    }
+  }
+
   utils.Damper = Damper;
 
   utils.ArrayWrapper = ArrayWrapper;
@@ -1265,6 +1353,9 @@ const foxUtils = (function(){
 
   // Easing.
   utils.Easing = Easing;
+
+  // loading関連
+  utils.ImageLoader = ImageLoader;
 
   return utils;
 })();
