@@ -1246,6 +1246,7 @@ const foxUtils = (function(){
   // getImageとgetImageAllでimgをgetできる。無い場合はnull.
   // registで上書きもできる。同じ名前を使いまわしてもいい。
   // というか「.regist(name,url);」というカジュアルな使い方でもいい。「.regist(name,{url:~~,callback:~~}).load(name)」とか。
+  // あるいはImageLoader.getImageDataを個別に利用することもできる。
   class ImageLoader{
     constructor(data = {}){
       this.loaders = {};
@@ -1266,29 +1267,37 @@ const foxUtils = (function(){
       const loader = this.loaders[name];
       const {url, callback} = loader;
       const promise = ImageLoader.getImageData(url);
-      promise.then((img) => {
-        if(img instanceof HTMLImageElement){
+      ImageLoader.getImageData(url).then(
+        (img) => {
+          // ロードに成功した場合
           console.log(`${name} is loaded.`);
           loader.img = img;
-          loader.loaded = true; // ロードに成功した場合
+          loader.loaded = true;
           callback(img);
+        },(error) => {
+          // ロードに失敗した場合
+          console.error(`${name} can't be loaded. error: ${error.message}`);
         }
-      });
-      // 戻り値をPromiseにする。
+      );
+      // このpromiseは上記のthenを実行した結果のPromiseではない
+      // それだとどっちもresolve扱いになる（どっちも問題なく履行されているため）
+      // なのでgetImageDataの結果としてのPromiseを返すことで
+      // 正しくすべてimgの取得に成功した場合のみallのresolveが実行されるようにする
       return promise;
     }
     loadAll(names, callback = (imgs) => {}){
       const promises = names.map((name) => this.load(name));
       return Promise.all(promises).then((imgs) => {
-        // loadに失敗した場合はそのようなloaderをひとつだけ指摘してスルー
-        for(const name of names){
-          if(!this.isLoaded(name)){
-            console.log(`${name} cannot loaded...`);
-            return;
-          }
-        }
+        // すべてのロードに成功した場合
         callback(imgs);
+        return true;
+      },(error) => {
+        // いずれかのロードに失敗した場合
+        console.error(`loadAll failure. error: ${error.message}`);
+        return false;
       });
+      // 一つの例としてはこのようにtrue/falseと分けることで、
+      // きちんと実行されたかどうかを踏まえたうえでthen以降の処理をするとか。
     }
     isLoaded(name){
       return this.loaders[name].loaded;
@@ -1308,20 +1317,18 @@ const foxUtils = (function(){
       return result;
     }
     static async getImageData(url){
-      try{
-        const response = await fetch(url);
-        if(!response.ok){
-          throw new Error(`response.status: ${response.status}`);
-        }
-        const blob = await response.blob();
-        const dlurl = URL.createObjectURL(blob)
-        const img = new Image(); // HTMLImageElementのコンストラクタ
-        img.src = dlurl;
-        await img.decode(); // HTMLImageElementなのでdecode()
-        return img;
-      }catch(error){
-        console.error(`error message: ${error.message}`);
+      const response = await fetch(url);
+      if(!response.ok){
+        // ロードに失敗した場合はエラーが生成されてそれ以降の処理は実行されない
+        // この内容はrejectで取得される
+        throw new Error(`response.status: ${response.status}`);
       }
+      const blob = await response.blob();
+      const dlurl = URL.createObjectURL(blob)
+      const img = new Image(); // HTMLImageElementのコンストラクタ
+      img.src = dlurl;
+      await img.decode(); // HTMLImageElementなのでdecode()
+      return img;
     }
   }
 
