@@ -169,6 +169,7 @@ const webglUtils = (function(){
 // ------------------------------------------------------------------------------------------------------------------------------------------ //
 
 // utility. ユーティリティ。DamperやTimerなどはここ。色関連も。文字列とかはこっちかもしれない。
+// ローディング関連もここに集めよう。他のあれこれが必要なく独立しているものは全部ここ。
 const foxUtils = (function(){
   const utils = {};
 
@@ -725,7 +726,6 @@ const foxUtils = (function(){
       return this;
     }
   }
-
 
   class TimeArrow extends Clock{
     constructor(params = {}){
@@ -1332,6 +1332,43 @@ const foxUtils = (function(){
     }
   }
 
+  // loadImageData
+  // 基本的にlilにぶち込んで使う
+  // なのでnullでなくなったら画像を使うなど、適宜工夫してください。これが実行された後、しばらくしてから出来る感じです。
+  function loadImageData(callback = (img) => {}){
+    const fileTag = document.createElement("input");
+    fileTag.setAttribute("type", "file");
+
+    fileTag.addEventListener("change", function (e) {
+      const file = e.target.files;
+      const reader = new FileReader();
+      // ファイルが無かった場合は何もしない。
+      if(file.length===0) return;
+
+      const fileType = file[0].name.split(".")[1];
+      if(fileType !== "png" && fileType !== "jpg" && fileType !== "jpeg" && fileType !== "PNG" && fileType !== "JPG" && fileType !== "JPEG"){
+        console.log("failure. please select png, jpg, or jpeg file.");
+        return;
+      }
+
+      //ファイルが複数読み込まれた際に、1つめを選択
+      reader.readAsDataURL(file[0]);
+
+      //ファイルが読み込めたら
+      reader.onload = function () {
+        console.log("load image success");
+        const src = reader.result;
+        const img = new Image();
+        img.src = src;
+        img.onload = function(){
+          callback(img);
+        }
+        fileTag.remove();
+      };
+    }, false);
+    fileTag.click();
+  }
+
   utils.Damper = Damper;
 
   utils.ArrayWrapper = ArrayWrapper;
@@ -1363,6 +1400,7 @@ const foxUtils = (function(){
 
   // loading関連
   utils.ImageLoader = ImageLoader;
+  utils.loadImageData = loadImageData;
 
   return utils;
 })();
@@ -2173,6 +2211,7 @@ const foxIA = (function(){
   // Soldier.
   // これを継承すればpointerdownやpointerupをパラメータありで使うことができる。
   // Brushにはこっちの方が適任かもしれない。
+  // e(event)で統一して問題ないです。混乱するんでやめよう。
   class Soldier extends PointerPrototype{
     constructor(commands = {}){
       super();
@@ -2180,9 +2219,9 @@ const foxIA = (function(){
         mousedown = (e,p) => {},
         mousemove = (e,p) => {},
         mouseup = (e,p) => {},
-        touchstart = (t,p) => {},
-        touchmove = (t,p) => {},
-        touchend = (t,p) => {},
+        touchstart = (e,p) => {},
+        touchmove = (e,p) => {},
+        touchend = (e,p) => {},
         pointerdown,
         pointermove,
         pointerup
@@ -3927,7 +3966,7 @@ const foxApplications = (function(){
 
   const {Damper, Tree} = foxUtils;
   const {Interaction} = foxIA;
-  const {Vecta, MT4} = fox3Dtools;
+  const {Vecta, MT3, MT4} = fox3Dtools;
 
   // isActiveを追加。カメラが動いてるときだけ更新するなどの用途がある。
   // configも追加。操作性をいじるための機能。actionCoeffを変更できる。デフォルトは1. thresholdも0.01とかでいいかもだしな。
@@ -4257,10 +4296,76 @@ const foxApplications = (function(){
     }
   }
 
+  // TRSprototype.
+  // いわゆるTransformのTRSモデル。local部分を個別にいじる感じですね。
+  class TRSprototype{
+    constructor(matrixFactory = () => {}){
+      this.base = matrixFactory();
+      this.localT = matrixFactory();
+      this.localR = matrixFactory();
+      this.localS = matrixFactory();
+      this.global = matrixFactory();
+    }
+    setBase(){
+      this.base.set(...arguments);
+      this.global.set(this.base);
+      return this;
+    }
+    init(){
+      this.localT.init();
+      this.localR.init();
+      this.localS.init();
+      this.global.set(this.base);
+      return this;
+    }
+    applyLocal(){
+      this.base.multM(this.localT).multM(this.localR).multM(this.localS);
+      this.localT.init();
+      this.lcoalR.init();
+      this.localS.init();
+      return this;
+    }
+    computeGlobal(){
+      this.global.set(this.base)
+                 .multM(this.localT).multM(this.localR).multM(this.localS);
+      return this;
+    }
+    mat(matName = "base"){
+      return this[matName];
+    }
+  }
+
+  // 2次元Transformクラス
+  class TRS3 extends TRSprototype{
+    constructor(base = new MT3()){
+      super(() => {return new MT3()});
+      this.setBase(base)
+    }
+    convert(){
+      return this.global.convert();
+    }
+    getLocalPosition(x, y){
+      // globalを適用した結果(x,y)になる点の位置ベクトルを算出する（z成分は1）
+      return this.global.invert(true).multV(new Vecta(x,y,1));
+    }
+  }
+
+  // 3次元Transformクラス（整備中）。そのうち必要になったらでいいかと。
+  class TRS4 extends TRSprototype{
+    constructor(base = new MT4()){
+      super(() => {return new MT4()});
+      this.setBase(base);
+    }
+  }
+
   applications.CameraController = CameraController;
   applications.WeightedVertice = WeightedVertice;
   applications.TransformTree = TransformTree;
   applications.TransformTreeArray = TransformTreeArray;
+
+  // Transform関連
+  applications.TRS3 = TRS3;
+  applications.TRS4 = TRS4;
 
   return applications;
 })();
