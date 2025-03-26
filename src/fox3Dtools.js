@@ -4364,6 +4364,202 @@ const foxApplications = (function(){
     }
   }
 
+  // TRS3のController
+  // 具体的な使い方としては画面サイズの大きさのTRSを用意してそれを動かす形
+  // Viewer用なので通常のTRS3の操作にはもしかすると向いてないかもしれないですね
+  class TRS3Controller extends Interaction{
+    constructor(canvas, options = {}, params = {}){
+      options.keydown = true;
+      options.keyup = true;
+      options.dblclick = true;
+      super(canvas, options);
+
+      this.TRSset = {};
+      this.currentTRS = null;
+
+      this.scaleFlag = false; // スタイラスペンでもスケールをいじれるようにする
+      this.translationFlag = false; // spaceキー（
+      this.rotationFlag = false; // Rキー
+
+      this.mouseScaleFactor = 0.0001;
+      this.mouseRotationFactor = 0.0005;
+      this.mouseTranslationFactor = 0.0003;
+      this.stylusScaleFactor = 0.0001;
+      this.stylusTranslationFactor = 0.0006;
+      this.stylusRotationFactor = 0.0007;
+      this.touchScaleFactor = 0.00025;
+      this.touchTranslationFactor = 0.0015;
+      this.touchRotationFactor = 0.1;
+
+      this.multiTouchStump = 0;
+      this.multiTouchThreshold = 30; // ms
+
+      this.setParam(params);
+
+      this.dmp = new Damper("translationX", "translationY", "rotation", "scale");
+      this.dmp.setMain((d) => {
+        // dがactiveでないなら処理する必要は無い。
+        if(!d.isActive()) return;
+        // activeのときだけ行列の更新を実行する
+        this.currentTRS.mat("localS").localScale(Math.pow(10, d.getValue("scale")));
+        this.currentTRS.mat("localR").localRotation(d.getValue("rotation"));
+        this.currentTRS.mat("localT").localTranslation(
+          d.getValue("translationX"), d.getValue("translationY")
+        );
+        this.currentTRS.computeGlobal();
+      });
+    }
+    setParam(params = {}){
+      // おかしなものをいじられないようにする. dmpとかいじられるとまずいので。
+      const paramList = [
+        "mouseScaleFactor", "mouseRotationFactor", "mouseTranslationFactor",
+        "stylusScaleFactor", "stylusRotationFactor", "stylusTranslationFactor",
+        "touchScaleFactor", "touchRotationFactor", "touchTranslationFactor",
+        "multiTouchThreshold"
+      ];
+      for(const param of Object.keys(params)){
+        if (paramList.indexOf(param) < 0) continue;
+        this[param] = params[param];
+      }
+    }
+    setFlag(type, flag = true){
+      //
+      this[`${type}Flag`] = flag;
+      return this;
+    }
+    registTRS(name, trs){
+      this.TRSset[name] = trs;
+      this.currentTRS = trs;
+      return this;
+    }
+    setTRS(name){
+      this.currentTRS = this.TRSset[name];
+      this.dmp.applyAll("reset");
+      return this;
+    }
+    getTRS(name){
+      return this.TRSset[name];
+    }
+    convert(){
+      // あったら便利かもしれない。
+      return this.currentTRS.convert();
+    }
+    mouseMoveDefaultAction(dx,dy,x,y){
+      // 平行移動と回転
+      if(this.pointers.length === 0) return;
+      const btn = this.pointers[0].button;
+      if(btn === 0){
+        // 左で両方やる
+        if(this.translationFlag){
+          this.dmp.action("translationX", dx * this.mouseTranslationFactor);
+          this.dmp.action("translationY", dy * this.mouseTranslationFactor);
+        }
+        if(this.rotationFlag){
+          this.dmp.action("rotation", dx * this.mouseRotationFactor);
+        }
+      }
+    }
+    touchSwipeAction(dx, dy, x, y, px, py){
+      // Interactionサイドの実行内容を書く。
+      // dx,dyが変位。
+      if(this.translationFlag){
+        this.dmp.action("translationX", dx * this.stylusTranslationFactor);
+        this.dmp.action("translationY", dy * this.stylusTranslationFactor);
+      }
+      if(this.rotationFlag){
+        this.dmp.action("rotation", dx * this.stylusRotationFactor);
+      }
+      if(this.scaleFlag){
+        this.dmp.action("scale", dx * this.stylusScaleFactor);
+      }
+    }
+    touchStartDefaultAction(){
+      // マルチタッチ時に色々設定する
+      if(this.pointers.length === 1){
+        this.multiTouchStump = window.performance.now();
+      }
+      if(this.pointers.length === 2){
+        this.setFlag("translation", true);
+        const elapsedTime = window.performance.now() - this.multiTouchStump;
+        // 同時タッチで回転、ディレイタッチで拡縮
+        if(elapsedTime < this.multiTouchThreshold){
+          this.setFlag("rotation", true);
+        }else{
+          this.setFlag("scale", true);
+        }
+      }
+    }
+    touchEndDefaultAction(){
+      if(this.pointers.length === 0){
+        this.multiTouchStump = 0;
+        this.setFlag("translation", false);
+        this.setFlag("rotation", false);
+        this.setFlag("scale", false);
+      }
+    }
+    touchPinchInOutAction(diff, ratio, x, y, px, py){
+      // diffは距離の変化。正の場合大きくなる。ratioは距離の比。
+      // タッチで拡縮やるならこれを使いましょう
+      if(this.scaleFlag){
+        this.dmp.action("scale", diff * this.touchScaleFactor);
+      }
+    }
+    touchMultiSwipeAction(dx, dy, x, y, px, py){
+      // dx,dyは重心の変位。
+      // タッチで平行移動やるならこれを使いましょう
+      if(this.translationFlag){
+        this.dmp.action("translationX", dx * this.touchTranslationFactor);
+        this.dmp.action("translationY", dy * this.touchTranslationFactor);
+      }
+    }
+    touchRotateAction(angle){
+      // 回転
+      if(this.rotationFlag){
+        this.dmp.action("rotation", angle * this.touchRotationFactor);
+      }
+    }
+    wheelAction(e){
+      this.dmp.action("scale", -e.deltaY * this.mouseScaleFactor);
+    }
+    update(){
+      this.dmp.execute();
+      this.dmp.applyAll("update");
+    }
+    keyDownAction(e){
+      // キーが押されたとき
+      switch(e.code){
+        case "Space": this.setFlag("translation", true); break;
+        case "KeyR": this.setFlag("rotation", true); break;
+        case "KeyS": this.setFlag("scale", true); break;
+      }
+      this.setFlag(e.code, true);
+    }
+    keyUpAction(e){
+      // キーが離れた時
+      switch(e.code){
+        case "Space": this.setFlag("translation", false); break;
+        case "KeyR": this.setFlag("rotation", false); break;
+        case "KeyS": this.setFlag("scale", false); break;
+      }
+    }
+    doubleClickAction(){
+      // ダブルクリック時。
+      this.currentTRS.init();
+    }
+    doubleTapAction(){
+      // ダブルタップ時。
+      this.currentTRS.init();
+    }
+    config(name, params = {}){
+      // nameの候補："rotation", "scale", "translationX", "translationY"
+      // たとえばscaleをいじるなら CC.config("scale",{threshold:0.1}); とかする
+      this.dmp.config(name, params);
+    }
+    isActive(){
+      return this.dmp.isActive();
+    }
+  }
+
   applications.CameraController = CameraController;
   applications.WeightedVertice = WeightedVertice;
   applications.TransformTree = TransformTree;
@@ -4372,6 +4568,7 @@ const foxApplications = (function(){
   // Transform関連
   applications.TRS3 = TRS3;
   applications.TRS4 = TRS4;
+  applications.TRS3Controller = TRS3Controller;
 
   return applications;
 })();
