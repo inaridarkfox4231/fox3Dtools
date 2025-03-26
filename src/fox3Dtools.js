@@ -1744,7 +1744,9 @@ const foxIA = (function(){
         // 差も比も使えると思ったので仕様変更
         this.touchPinchInOutAction(diff, ratio, gx, gy, gPrevX, gPrevY);
         this.touchMultiSwipeAction(gDX, gDY, gx, gy, gPrevX, gPrevY);
-        // rotateは要検討
+        // rotateは一応用意するが、使うかどうかはその都度決めましょう
+        const angle = Interaction.calculateRotationAngle(q.prevX-p.prevX, q.prevY-p.prevY, q.x-p.x, q.y-p.y);
+        this.touchRotateAction(angle);
       }
     }
     touchMovePointerAction(e){
@@ -1775,8 +1777,8 @@ const foxIA = (function(){
       // Interactionサイドの実行内容を書く。
       // dx,dyは重心の変位。
     }
-    touchRotateAction(value, x, y, px, py){
-      // TODO.
+    touchRotateAction(angle){
+      // prevP-->prevQをp-->qにする回転角度で何かしら実行する
     }
     touchEndAction(e){
       // End時のアクション。
@@ -1816,6 +1818,10 @@ const foxIA = (function(){
     }
     getPointers(){
       return this.pointers;
+    }
+    static calculateRotationAngle(a, b, c, d){
+      // ベクトル(a,b)をベクトル(c,d)にする回転の向きを正の向きとする。
+      return Math.atan2(a*d-b*c, a*c+b*d);
     }
   }
 
