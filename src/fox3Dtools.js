@@ -1322,7 +1322,7 @@ const foxUtils = (function(){
       return true;
     }
     getResource(name){
-      return this.loaders[name].img;
+      return this.loaders[name].res;
     }
     getResourceAll(names = []){
       if(names.length === 0){
@@ -1334,8 +1334,8 @@ const foxUtils = (function(){
       return result;
     }
     static getResource(url, name){
-      const splitted = url.split("."); // これの末尾がpostFixになる。
-      switch(splitted.pop()){
+      const fileType = url.split(".").pop(); // これの末尾がpostFixになる。
+      switch(fileType){
         case "jpg":
         case "jpeg":
         case "png":
@@ -1449,7 +1449,7 @@ const foxUtils = (function(){
       // ファイルが無かった場合は何もしない。
       if(file.length===0) return;
 
-      const fileType = file[0].name.split(".")[1];
+      const fileType = file[0].name.split(".").pop();
       if(fileType !== "png" && fileType !== "jpg" && fileType !== "jpeg" && fileType !== "PNG" && fileType !== "JPG" && fileType !== "JPEG"){
         console.log("failure. please select png, jpg, or jpeg file.");
         return;
@@ -1470,6 +1470,71 @@ const foxUtils = (function(){
         fileTag.remove();
       };
     }, false);
+    fileTag.click();
+  }
+
+  function loadJsonData(callback = (jsn) => {}){
+    const fileTag = document.createElement("input");
+    fileTag.setAttribute("type", "file");
+      //const clickEvent = new Event("change");
+    fileTag.addEventListener("change", function (e) {
+      const file = e.target.files;
+      const reader = new FileReader();
+      // ファイルが無かった場合は何もしない。
+      if(file.length===0) return;
+
+      const fileType = file[0].name.split(".").pop();
+      if(fileType !== "json" && fileType !== "JSON"){
+        console.log("failure. please select json file.");
+        return;
+      }
+
+      //ファイルが複数読み込まれた際に、1つめを選択
+      reader.readAsText(file[0]);
+
+      //ファイルが読み込めたら
+      reader.onload = function () {
+        const jsn = reader.result;
+        const parsedData = JSON.parse(jsn);
+        console.log(`load json success`);
+        callback(parsedData);
+        fileTag.remove();
+      };
+    }, false);
+
+    // clickイベントを発火させるには単純にclick()でいいんですね
+    fileTag.click();
+  }
+
+  function loadTextData(callback = (txt) => {}){
+    const fileTag = document.createElement("input");
+    fileTag.setAttribute("type", "file");
+      //const clickEvent = new Event("change");
+    fileTag.addEventListener("change", function (e) {
+      const file = e.target.files;
+      const reader = new FileReader();
+      // ファイルが無かった場合は何もしない。
+      if(file.length===0) return;
+
+      const fileType = file[0].name.split(".").pop();
+      if(fileType !== "txt"){
+        console.log("failure. please select txt file.");
+        return;
+      }
+
+      //ファイルが複数読み込まれた際に、1つめを選択
+      reader.readAsText(file[0]);
+
+      //ファイルが読み込めたら
+      reader.onload = function () {
+        const txt = reader.result;
+        console.log(`load text success`);
+        callback(txt);
+        fileTag.remove();
+      };
+    }, false);
+
+    // clickイベントを発火させるには単純にclick()でいいんですね
     fileTag.click();
   }
 
@@ -1506,6 +1571,8 @@ const foxUtils = (function(){
   //utils.ImageLoader = ImageLoader;
   utils.ResourceLoader = ResourceLoader;
   utils.loadImageData = loadImageData;
+  utils.loadTextData = loadTextData;
+  utils.loadJsonData = loadJsonData;
 
   return utils;
 })();
