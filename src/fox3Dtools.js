@@ -1237,17 +1237,18 @@ const foxUtils = (function(){
     }
   }
 
-  // 使い方
-  // コンストラクタで{name:url}もしくは{name:{url:~~,callback:~~}}という形で入れる
-  // 通常はname:urlという形でいい
-  // load(name)でロードされる。callbackが実行される。callbackを入れておくときちんとロードされた場合しか
-  // 実行されない。loadAllについてはnamesの内容をすべてload出来た場合だけcallbackが実行される。
-  // isLoaded(name)とisLoadedAll(names)で確認できる
-  // getImageとgetImageAllでimgをgetできる。無い場合はnull.
-  // registで上書きもできる。同じ名前を使いまわしてもいい。
-  // というか「.regist(name,url);」というカジュアルな使い方でもいい。「.regist(name,{url:~~,callback:~~}).load(name)」とか。
-  // あるいはImageLoader.getImageDataを個別に利用することもできる。
-  class ImageLoader{
+  // ResourceLoader. 使い方
+  // 生成するときに{name:{url:~~,callback:~~,arrayBuffer:~~}, ...} のように作るんだけどregistでも作れる
+  // loadでロードすると同時にpromiseを返すのでそのまま非同期処理に持っていける
+  // loadAllでまとめてロードできた場合の処理を記述できる
+  // isLoadedとisLoadedAllだがisLoadedAllは引数指定がない場合「すべて」となる
+  // 望むならすべてロードされた状態でdrawを開始できる
+  // arrayBuffer形式での取得も可能とする
+  // getResourceで取得
+  // fontについてはfontFileを返す。document.fonts.add(res)で登録時の名前で使えるようになる
+  // opentypeでやりたいならarrayBufferで取得してよろしくやる
+  // videoやmusicも可能、videoの場合出力形式はHTMLVideoElementなのでそのままtexImage2Dで使える
+  class ResourceLoader{
     constructor(data = {}){
       this.loaders = {};
       for(const name of Object.keys(data)){
@@ -1255,41 +1256,49 @@ const foxUtils = (function(){
       }
     }
     regist(name, params = {}){
+      // 文字列の場合はそのままurlとしcallbackは存在しないとする
       if(typeof params === 'string'){
         this.regist(name, {url:params});
         return this;
       }
-      const {url, callback = (img) => {}} = params;
-      this.loaders[name] = {url, callback, loaded:false, img:null};
+      // resはresourceの省略形
+      // callbackは省略化、arrayBufferをいじるとあれできる
+      const {url, callback = (res) => {}, arrayBuffer = false} = params;
+      this.loaders[name] = {url, callback, arrayBuffer, loaded:false, res:null};
       return this;
     }
     load(name){
       const loader = this.loaders[name];
-      const {url, callback} = loader;
-      const promise = ImageLoader.getImageData(url);
-      ImageLoader.getImageData(url).then(
-        (img) => {
+      const {url, callback, arrayBuffer} = loader;
+      // urlのpostFixで場合分けする。
+      // jpg,jpeg,png,JPG,JPEG,PNG --> HTMLImageElement
+      // json,JSON,gltf --> JSON Object
+      // txt --> text Object
+      // wav,ogg,mp3,WAV,OGG,MP3 --> HTMLAudioElement
+      // mp4,MP4 --> HTMLVideoElement
+      // 以上となります...が、ArrayBufferが入ってない
+      // ArrayBuffer:trueとすることでArrayBuffer形式で取得できる
+      // その場合promise以降の処理を自前で用意することになるし、できる。
+      const promise = (arrayBuffer ? ResourceLoader.getArrayBuffer(url) : ResourceLoader.getResource(url, name));
+      promise.then(
+        (res) => {
           // ロードに成功した場合
           console.log(`${name} is loaded.`);
-          loader.img = img;
+          loader.res = res;
           loader.loaded = true;
-          callback(img);
+          callback(res);
         },(error) => {
           // ロードに失敗した場合
           console.error(`${name} can't be loaded. error: ${error.message}`);
         }
       );
-      // このpromiseは上記のthenを実行した結果のPromiseではない
-      // それだとどっちもresolve扱いになる（どっちも問題なく履行されているため）
-      // なのでgetImageDataの結果としてのPromiseを返すことで
-      // 正しくすべてimgの取得に成功した場合のみallのresolveが実行されるようにする
       return promise;
     }
-    loadAll(names, callback = (imgs) => {}){
+    loadAll(names, callback = (resources) => {}){
       const promises = names.map((name) => this.load(name));
-      return Promise.all(promises).then((imgs) => {
+      return Promise.all(promises).then((resources) => {
         // すべてのロードに成功した場合
-        callback(imgs);
+        callback(resources);
         return true;
       },(error) => {
         // いずれかのロードに失敗した場合
@@ -1302,25 +1311,64 @@ const foxUtils = (function(){
     isLoaded(name){
       return this.loaders[name].loaded;
     }
-    isLoadedAll(names){
+    isLoadedAll(names = []){
+      if(names.length === 0){
+        // 未指定の場合は「すべて」
+        names = Object.keys(this.loaders);
+      }
       for(const name of names){
         if(!this.loaders[name].loaded) return false;
       }
       return true;
     }
-    getImage(name){
+    getResource(name){
       return this.loaders[name].img;
     }
-    getImageAll(names){
+    getResourceAll(names = []){
+      if(names.length === 0){
+        // 未指定の場合は「すべて」
+        names = Object.keys(this.loaders);
+      }
       const result = {};
-      for(const name of names){ result[name] = this.getImage(name); }
+      for(const name of names){ result[name] = this.getResource(name); }
       return result;
     }
-    static async getImageData(url){
+    static getResource(url, name){
+      const splitted = url.split("."); // これの末尾がpostFixになる。
+      switch(splitted.pop()){
+        case "jpg":
+        case "jpeg":
+        case "png":
+        case "JPG":
+        case "JPEG":
+        case "PNG":
+          return ResourceLoader.getImage(url);
+        case "txt":
+          return ResourceLoader.getText(url);
+        case "json":
+        case "JSON":
+        case "gltf":
+          return ResourceLoader.getJSON(url);
+        case "wav":
+        case "mp3":
+        case "ogg":
+        case "WAV":
+        case "MP3":
+        case "OGG":
+          return ResourceLoader.getAudio(url);
+        case "mp4":
+        case "MP4":
+          return ResourceLoader.getVideo(url);
+        case "ttf":
+        case "otf":
+          return ResourceLoader.getFontFile(url, name);
+      }
+      return null;
+    }
+    static async getImage(url){
+      // HTMLImageElement
       const response = await fetch(url);
       if(!response.ok){
-        // ロードに失敗した場合はエラーが生成されてそれ以降の処理は実行されない
-        // この内容はrejectで取得される
         throw new Error(`response.status: ${response.status}`);
       }
       const blob = await response.blob();
@@ -1329,6 +1377,62 @@ const foxUtils = (function(){
       img.src = dlurl;
       await img.decode(); // HTMLImageElementなのでdecode()
       return img;
+    }
+    static async getText(url){
+      // text string
+      const response = await fetch(url);
+      if(!response.ok){
+        throw new Error(`response.status: ${response.status}`);
+      }
+      const txt = response.text(); // テキストデータが欲しい時はこれ
+      return txt;
+    }
+    static async getJSON(url){
+      // json object
+      const response = await fetch(url);
+      if(!response.ok){
+        throw new Error(`response.status: ${response.status}`);
+      }
+      const json = response.json(); // jsonデータが欲しい時はこれ
+      return json;
+    }
+    static async getAudio(url){
+      // HTMLAudioElement
+      const response = await fetch(url);
+      if(!response.ok){
+        throw new Error(`response.status: ${response.status}`);
+      }
+      const blob = await response.blob();
+      const dlurl = URL.createObjectURL(blob)
+      const audio = document.createElement('audio');
+      audio.src = dlurl; // decodeはHTMLImageElementのためのもの。
+      return audio;
+    }
+    static async getVideo(url){
+      // HTMLVideoElement
+      const response = await fetch(url);
+      if(!response.ok){
+        throw new Error(`response.status: ${response.status}`);
+      }
+      const blob = await response.blob();
+      const dlurl = URL.createObjectURL(blob)
+      const video = document.createElement('video');
+      video.src = dlurl;
+      return video;
+    }
+    static async getArrayBuffer(url){
+      // ArrayBufferの形でほしい場合。たとえばAudioの場合など。
+      const response = await fetch(url);
+      if(!response.ok){
+        throw new Error(`response.status: ${response.status}`);
+      }
+      const ab = response.arrayBuffer(); // ArrayBufferデータが欲しいとき
+      return ab;
+    }
+    static async getFontFile(url, name){
+      const fontFile = new FontFace(name, `url(${url})`);
+      await fontFile.load();
+  	return fontFile;
     }
   }
 
@@ -1399,7 +1503,8 @@ const foxUtils = (function(){
   utils.Easing = Easing;
 
   // loading関連
-  utils.ImageLoader = ImageLoader;
+  //utils.ImageLoader = ImageLoader;
+  utils.ResourceLoader = ResourceLoader;
   utils.loadImageData = loadImageData;
 
   return utils;
