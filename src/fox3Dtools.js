@@ -4732,6 +4732,135 @@ const foxApplications = (function(){
     }
   }
 
+  // evenlySpacing. 均等割り。
+  // pointsを改変する形であり、返すわけではない。
+  function evenlySpacing(points, options = {}){
+    const {minLength = 1, closed = false} = options;
+
+    // closedの場合はおしりに頭を付ける
+    // そして最後におしりを外す
+    const q = points.slice();
+    if(closed){ q.push(q[0].copy()); }
+
+    // まず全長を計算する
+    let totalLength = 0;
+    for(let i=0; i<q.length-1; i++){ totalLength += q[i].dist(q[i+1]); }
+    // 分割数
+    const N = Math.floor(totalLength/minLength) + 1;
+    // セグメント長
+    const l = totalLength/N;
+    // lを基準の長さとして分けていく。まず頭を採用する。次の点と差を取る。これの累積を
+    // 取っていってlを超えるようならそこで比率を計算しlerpして加えて差分を新しい
+    // elapsedとする。
+    let elapsed = 0;
+    const prev = q[0].copy();
+    const next = new Vecta();
+    const result = [q[0]];
+    for(let i=1; i<q.length; i++){
+      next.set(q[i]);
+      const d = prev.dist(next);
+      if(elapsed + d < l){
+        elapsed += d;
+        prev.set(next);
+        continue;
+      }
+      // prevとnextをratio:(l-elapsed)/dで分割。
+
+      // この時点でelapsedはlより小さいことが想定されている。が...
+      // 厳密にやるならelapsed+d>=lであるからして
+      // (l*m-elapsed)/dによるlerpをelapsed+d>=m*lであるすべてのmに対して実行し
+      // elapsedにd-m*lを足して終わりにする. m*l <= elapsed+d < (m+1)*lなので
+      // 0<=elapsed+d-m*l<lである。
+      let m=1;
+      while(elapsed + d >= m*l){
+        const newPoint = prev.lerp(next, (m*l - elapsed)/d, true);
+        result.push(newPoint);
+        m++;
+      }
+      elapsed += d-(m-1)*l;
+      prev.set(next);
+    }
+    // 最後の点が入ったり入んなかったりするのがめんどくさい。
+    // そこで
+    // 最後の点についてはもう入れてしまって
+    // 末尾とその一つ前がl/2より小さいときにカットする。
+    result.push(q[q.length-1].copy());
+    if(result[result.length-1].dist(result[result.length-2]) < l/2){
+      result.pop();
+    }
+    // closedの場合は末尾をカットする
+    if(closed){ result.pop(); }
+
+    points.length = 0;
+    points.push(...result);
+  }
+  // これで決定版でいいと思います。
+
+  function evenlySpacingAll(contours, options = {}){
+    for(const contour of contours){
+      evenlySpacing(contour, options);
+    }
+  }
+
+  // クワドベジエライズ
+  // 中点を取り、もともとの点を制御点とする
+  // openの場合は0のみ残し、0-1点と直線でつなぐ
+  // そしてL'-LとLを直線でつなぐ
+  // closedの場合は0-1からスタートし、最後に0=Lを制御点とし、L'-Lと0-1をベジエでつなぐ
+  // 感じですね。
+  // これも改変なので、返す形ではない。
+  function quadBezierize(points, options = {}){
+    const {detail = 4, closed = false} = options;
+    const subPoints = [];
+    for(let i=0; i<points.length-1; i++){
+      subPoints.push(points[i].lerp(points[i+1], 0.5, true));
+    }
+    if (closed) {
+      subPoints.push(points[points.length-1].lerp(points[0], 0.5, true));
+    }
+    const result = [];
+    if (!closed) {
+      result.push(points[0]);
+      result.push(subPoints[0]);
+      for(let k=1; k<subPoints.length; k++){
+        const p = subPoints[k-1];
+        const q = points[k];
+        const r = subPoints[k];
+        for(let m=1; m<=detail; m++){
+          const t = m/detail;
+          result.push(new Vecta(
+            (1-t)*(1-t)*p.x + 2*t*(1-t)*q.x + t*t*r.x,
+            (1-t)*(1-t)*p.y + 2*t*(1-t)*q.y + t*t*r.y, 0
+          ));
+        }
+      }
+      result.push(points[points.length-1]);
+    } else {
+      result.push(subPoints[0]);
+      for(let k=1; k<=subPoints.length; k++){
+        const p = subPoints[k-1];
+        const q = points[k%subPoints.length];
+        const r = subPoints[k%subPoints.length];
+        for(let m=1; m<=detail; m++){
+          const t = m/detail;
+          if(m===detail&&k===subPoints.length)continue;
+          result.push(new Vecta(
+            (1-t)*(1-t)*p.x + 2*t*(1-t)*q.x + t*t*r.x,
+            (1-t)*(1-t)*p.y + 2*t*(1-t)*q.y + t*t*r.y, 0
+          ));
+        }
+      }
+    }
+    points.length = 0;
+    points.push(...result);
+  }
+
+  function quadBezierizeAll(contours, options = {}){
+    for(const contour of contours){
+      quadBezierize(contour, options);
+    }
+  }
+
   applications.CameraController = CameraController;
   applications.WeightedVertice = WeightedVertice;
   applications.TransformTree = TransformTree;
@@ -4741,6 +4870,12 @@ const foxApplications = (function(){
   applications.TRS3 = TRS3;
   applications.TRS4 = TRS4;
   applications.TRS3Controller = TRS3Controller;
+
+  // contours関連
+  applications.evenlySpacing = evenlySpacing;
+  applications.evenlySpacingAll = evenlySpacingAll;
+  applications.quadBezierize = quadBezierize;
+  applications.quadBezierizeAll = quadBezierizeAll;
 
   return applications;
 })();
