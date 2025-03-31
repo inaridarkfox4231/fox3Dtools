@@ -4863,6 +4863,134 @@ const foxApplications = (function(){
     }
   }
 
+  // 連続する点しか見ない簡易版です
+  function mergePoints(points, options = {}){
+    const {threshold = 0.000001, closed = false} = options;
+
+    for(let i = points.length-1; i >= 1; i--){
+      const p = points[i];
+      const q = points[i-1];
+      if (p.dist(q) < threshold){
+        points.splice(i,1);
+      }
+    }
+    if (closed) {
+      // 頭に戻る場合はそれも排除する
+      if (points[0].dist(points[points.length-1]) < threshold) {
+        points.pop();
+      }
+    }
+  }
+
+  // こっちも。なお、頂点のマージはこれとは別に用意したいところですね。mergeVertices？
+  function mergePointsAll(contours, options = {}){
+    for(let contour of contours) {
+      mergePoints(contour, options);
+    }
+  }
+
+  // SVG翻訳機構作っておくか
+  function parseData(options = {}){
+    const {data="M 0 0", bezierDetail2 = 8, bezierDetail3 = 5, parseScale = 1, lineSegmentLength = 1} = options;
+    const cmdData = data.split(" ");
+    const result = [];
+    let subData = [];
+    for(let i=0; i<cmdData.length; i++){
+      switch(cmdData[i]){
+        case "M":
+          if (subData.length>0) result.push(subData.slice());
+          subData.length = 0;
+          subData.push(new Vecta(
+            Number(cmdData[i+1]), Number(cmdData[i+2]), 0
+          ).mult(parseScale));
+          i+=2; break;
+        case "L":
+          const p = subData[subData.length-1];
+          const q = new Vecta(
+            Number(cmdData[i+1]), Number(cmdData[i+2]), 0
+          ).mult(parseScale);
+          const lineLength = q.dist(p);
+          for(let lengthSum=0; lengthSum<lineLength; lengthSum += lineSegmentLength){
+            subData.push(p.lerp(q, lengthSum/lineLength, true));
+          }
+          subData.push(q);
+          i+=2; break;
+        case "Q":
+          const p0 = subData[subData.length-1];
+          const a0 = Number(cmdData[i+1])*parseScale;
+          const b0 = Number(cmdData[i+2])*parseScale;
+          const c0 = Number(cmdData[i+3])*parseScale;
+          const d0 = Number(cmdData[i+4])*parseScale;
+          for(let k=1; k<=bezierDetail2; k++){
+            const t = k/bezierDetail2;
+            subData.push(new Vecta(
+              (1-t)*(1-t)*p0.x + 2*t*(1-t)*a0 + t*t*c0,
+              (1-t)*(1-t)*p0.y + 2*t*(1-t)*b0 + t*t*d0,
+              0
+            ));
+          }
+          i+=4; break;
+        case "C":
+          const p1 = subData[subData.length-1];
+          const a1 = Number(cmdData[i+1])*parseScale;
+          const b1 = Number(cmdData[i+2])*parseScale;
+          const c1 = Number(cmdData[i+3])*parseScale;
+          const d1 = Number(cmdData[i+4])*parseScale;
+          const e1 = Number(cmdData[i+5])*parseScale;
+          const f1 = Number(cmdData[i+6])*parseScale;
+          for(let k=1; k<=bezierDetail3; k++){
+            const t = k/bezierDetail3;
+            subData.push(new Vecta(
+              (1-t)*(1-t)*(1-t)*p1.x + 3*t*(1-t)*(1-t)*a1 + 3*t*t*(1-t)*c1 + t*t*t*e1,
+              (1-t)*(1-t)*(1-t)*p1.y + 3*t*(1-t)*(1-t)*b1 + 3*t*t*(1-t)*d1 + t*t*t*f1,
+              0
+            ));
+          }
+          i+=6; break;
+        case "Z":
+          // 最初の点を追加するんだけど、subData[0]を直接ぶち込むと
+          // 頭とおしりが同じベクトルになってしまうので、
+          // copy()を取らないといけないんですね
+          // Lでつなぎます。
+          const p2 = subData[subData.length-1];
+          const q2 = subData[0].copy();
+          const lineLength2 = q2.dist(p2);
+          for(let lengthSum=0; lengthSum<lineLength2; lengthSum += lineSegmentLength){
+            subData.push(p2.lerp(q2, lengthSum/lineLength2, true));
+          }
+          subData.push(q2);
+          //result.push(subData.slice());
+          break;
+      }
+    }
+    // Mが出てこない場合はパス終了
+    result.push(subData.slice());
+    return result;
+  }
+
+  // 閉曲線(closed)前提
+  // 色々考えた結果evenlyは2回やるのがいいということになった。
+  // 返すのはVectaの閉路の配列の配列
+  function getSVGContours(params = {}){
+    const {
+      svgData = "M 0 0 L 1 0 L 1 1 L 0 1 Z", scaleFactor = 200,
+      bezierDetail2 = 8, bezierDetail3 = 5, lineSegmentLengthRatio = 1/64,
+      minLengthRatio = 1/50, mergeThresholdRatio = 1e-9
+    } = params;
+    const svgContours = parseData({
+      data:svgData, parseScale:scaleFactor,
+      bezierDetail2:bezierDetail2, bezierDetail3:bezierDetail3,
+      lineSegmentLength:scaleFactor*lineSegmentLengthRatio
+    });
+
+    mergePointsAll(svgContours, {threshold:scaleFactor*mergeThresholdRatio, closed:true});
+    evenlySpacingAll(svgContours, {minLength:scaleFactor*minLengthRatio, closed:true});
+    mergePointsAll(svgContours, {threshold:scaleFactor*mergeThresholdRatio, closed:true});
+    evenlySpacingAll(svgContours, {minLength:scaleFactor*minLengthRatio, closed:true});
+
+    return svgContours;
+  }
+
   applications.CameraController = CameraController;
   applications.WeightedVertice = WeightedVertice;
   applications.TransformTree = TransformTree;
@@ -4878,6 +5006,10 @@ const foxApplications = (function(){
   applications.evenlySpacingAll = evenlySpacingAll;
   applications.quadBezierize = quadBezierize;
   applications.quadBezierizeAll = quadBezierizeAll;
+  applications.mergePoints = mergePoints;
+  applications.mergePointsAll = mergePointsAll;
+  applications.parseData = parseData;
+  applications.getSVGContours = getSVGContours;
 
   return applications;
 })();
