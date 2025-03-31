@@ -4830,7 +4830,8 @@ const foxApplications = (function(){
           const t = m/detail;
           result.push(new Vecta(
             (1-t)*(1-t)*p.x + 2*t*(1-t)*q.x + t*t*r.x,
-            (1-t)*(1-t)*p.y + 2*t*(1-t)*q.y + t*t*r.y, 0
+            (1-t)*(1-t)*p.y + 2*t*(1-t)*q.y + t*t*r.y,
+            (1-t)*(1-t)*p.z + 2*t*(1-t)*q.z + t*t*r.z
           ));
         }
       }
@@ -4846,7 +4847,8 @@ const foxApplications = (function(){
           if(m===detail&&k===subPoints.length)continue;
           result.push(new Vecta(
             (1-t)*(1-t)*p.x + 2*t*(1-t)*q.x + t*t*r.x,
-            (1-t)*(1-t)*p.y + 2*t*(1-t)*q.y + t*t*r.y, 0
+            (1-t)*(1-t)*p.y + 2*t*(1-t)*q.y + t*t*r.y,
+            (1-t)*(1-t)*p.z + 2*t*(1-t)*q.z + t*t*r.z
           ));
         }
       }
