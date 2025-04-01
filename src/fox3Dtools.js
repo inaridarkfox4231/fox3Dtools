@@ -4771,13 +4771,22 @@ const foxApplications = (function(){
       // (l*m-elapsed)/dによるlerpをelapsed+d>=m*lであるすべてのmに対して実行し
       // elapsedにd-m*lを足して終わりにする. m*l <= elapsed+d < (m+1)*lなので
       // 0<=elapsed+d-m*l<lである。
+      // 数学のお時間です。
+      // mの想定される上限値というのはおおよそ(elapsed+d)/lですが、
+      // elapsedはl以下が想定されているし、dはtotalLength以下。
+      // そしてd/lというのはtotalLength/lで抑えられる。これは何か。Nである。つまり？
+      // mがN+1より大きくなることは「ありえない」。安全のためN+2をとっても、
+      // せいぜいそのくらい。だからm>N+2になったらbreakしていい。
+      // 無限ループにはならない。その場合はもうelapsedを0にしよう。
       let m=1;
       while(elapsed + d >= m*l){
         const newPoint = prev.lerp(next, (m*l - elapsed)/d, true);
         result.push(newPoint);
         m++;
+        if(m > N+2) break;
       }
       elapsed += d-(m-1)*l;
+      if(m > N+2) elapsed = 0;
       prev.set(next);
     }
     // 最後の点が入ったり入んなかったりするのがめんどくさい。
