@@ -4901,13 +4901,13 @@ const foxApplications = (function(){
           if (subData.length>0) result.push(subData.slice());
           subData.length = 0;
           subData.push(new Vecta(
-            Number(cmdData[i+1]), Number(cmdData[i+2]), 0
+            Number(cmdData[i+1]), Number(cmdData[i+2])
           ).mult(parseScale));
           i+=2; break;
         case "L":
           const p = subData[subData.length-1];
           const q = new Vecta(
-            Number(cmdData[i+1]), Number(cmdData[i+2]), 0
+            Number(cmdData[i+1]), Number(cmdData[i+2])
           ).mult(parseScale);
           const lineLength = q.dist(p);
           for(let lengthSum=0; lengthSum<lineLength; lengthSum += lineSegmentLength){
@@ -4925,8 +4925,7 @@ const foxApplications = (function(){
             const t = k/bezierDetail2;
             subData.push(new Vecta(
               (1-t)*(1-t)*p0.x + 2*t*(1-t)*a0 + t*t*c0,
-              (1-t)*(1-t)*p0.y + 2*t*(1-t)*b0 + t*t*d0,
-              0
+              (1-t)*(1-t)*p0.y + 2*t*(1-t)*b0 + t*t*d0
             ));
           }
           i+=4; break;
@@ -4942,8 +4941,7 @@ const foxApplications = (function(){
             const t = k/bezierDetail3;
             subData.push(new Vecta(
               (1-t)*(1-t)*(1-t)*p1.x + 3*t*(1-t)*(1-t)*a1 + 3*t*t*(1-t)*c1 + t*t*t*e1,
-              (1-t)*(1-t)*(1-t)*p1.y + 3*t*(1-t)*(1-t)*b1 + 3*t*t*(1-t)*d1 + t*t*t*f1,
-              0
+              (1-t)*(1-t)*(1-t)*p1.y + 3*t*(1-t)*(1-t)*b1 + 3*t*t*(1-t)*d1 + t*t*t*f1
             ));
           }
           i+=6; break;
