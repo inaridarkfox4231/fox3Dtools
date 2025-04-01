@@ -4734,8 +4734,14 @@ const foxApplications = (function(){
 
   // evenlySpacing. 均等割り。
   // pointsを改変する形であり、返すわけではない。
+  // partitionが指定されている場合、minLengthが指定されていても無視して、その個数になるように塩梅する。
+  // partitionが未定義の場合はfisceToyBoxと一緒でminLengthに従う。
+  // つまり両方未定義の場合はminLength=1で今まで通り。
+  // 逆に両方定義済みならpartitionが優先される。partitionは1以上になるように修正される場合がある。
+  // showDetail:trueの場合、戻り値は{minL,maxL}が計算された値で返る。
+  // falseの場合はどっちもlが返る。要するに雑ということ。
   function evenlySpacing(points, options = {}){
-    const {minLength = 1, closed = false, showDetail = false} = options;
+    const {partition, minLength = 1, closed = false, showDetail = false} = options;
 
     // closedの場合はおしりに頭を付ける
     // そして最後におしりを外す
@@ -4744,11 +4750,20 @@ const foxApplications = (function(){
 
     // まず全長を計算する
     let totalLength = 0;
+    let N = 0;
+    let l = 0;
     for(let i=0; i<q.length-1; i++){ totalLength += q[i].dist(q[i+1]); }
-    // 分割数
-    const N = Math.floor(totalLength/minLength) + 1;
-    // セグメント長
-    const l = totalLength/N;
+
+    if(partition !== undefined){
+      // partitionが定義されている場合はそれでNを決めてlはそれとtotalLengthで決める
+      N = Math.max(1, partition);
+      l = totalLength/N;
+    }else{
+      // 未定義の場合、minLengthを使う。これでNを決めてそこからlを決める。
+      N = Math.floor(totalLength/minLength) + 1;
+      l = totalLength/N;
+    }
+
     // lを基準の長さとして分けていく。まず頭を採用する。次の点と差を取る。これの累積を
     // 取っていってlを超えるようならそこで比率を計算しlerpして加えて差分を新しい
     // elapsedとする。
@@ -4813,7 +4828,11 @@ const foxApplications = (function(){
         maxL = Math.max(d, maxL);
       }
       console.log(`minL:${minL}, maxL:${maxL}`);
+      // showDetailの場合はきちんと計算して返す
+      return {minL, maxL};
     }
+    // そうでない場合は単純にlを返す。まあそこまで外れてはいない。
+    return {minL:l, maxL:l};
   }
   // これで決定版でいいと思います。
 
