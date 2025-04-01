@@ -4735,7 +4735,7 @@ const foxApplications = (function(){
   // evenlySpacing. 均等割り。
   // pointsを改変する形であり、返すわけではない。
   function evenlySpacing(points, options = {}){
-    const {minLength = 1, closed = false} = options;
+    const {minLength = 1, closed = false, showDetail = false} = options;
 
     // closedの場合はおしりに頭を付ける
     // そして最後におしりを外す
@@ -4793,6 +4793,18 @@ const foxApplications = (function(){
 
     points.length = 0;
     points.push(...result);
+
+    if(showDetail){
+      let minL = Infinity;
+      let maxL = -Infinity;
+      for(let i=0; i<points.length; i++){
+        if(!closed && i===points.length-1) break;
+        const d = points[i].dist(points[(i+1)%points.length]);
+        minL = Math.min(d, minL);
+        maxL = Math.max(d, maxL);
+      }
+      console.log(`minL:${minL}, maxL:${maxL}`);
+    }
   }
   // これで決定版でいいと思います。
 
@@ -4994,9 +5006,9 @@ const foxApplications = (function(){
     });
 
     mergePointsAll(svgContours, {threshold:scaleFactor*mergeThresholdRatio, closed:true, showDetail});
-    evenlySpacingAll(svgContours, {minLength:scaleFactor*minLengthRatio, closed:true});
+    evenlySpacingAll(svgContours, {minLength:scaleFactor*minLengthRatio, closed:true, showDetail});
     mergePointsAll(svgContours, {threshold:scaleFactor*mergeThresholdRatio, closed:true, showDetail});
-    evenlySpacingAll(svgContours, {minLength:scaleFactor*minLengthRatio, closed:true});
+    evenlySpacingAll(svgContours, {minLength:scaleFactor*minLengthRatio, closed:true, showDetail});
 
     return svgContours;
   }
@@ -5102,7 +5114,7 @@ const foxApplications = (function(){
       threshold:mergeThresholdRatio*textScale, closed:true, showDetail
     });
     evenlySpacingAll(textContours, {
-      minLength:minLengthRatio*textScale, closed:true
+      minLength:minLengthRatio*textScale, closed:true, showDetail
     });
 
     return textContours;
