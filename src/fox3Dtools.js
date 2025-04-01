@@ -5001,6 +5001,113 @@ const foxApplications = (function(){
     return svgContours;
   }
 
+  // font.getPath()で得られるパスデータのcommandプロパティをテキストに
+  // 翻訳する。本来は不要かもしれないがこれによりこれとは別の汎用関数が
+  // 利用可能になるのでこういった手順を踏んでいる。最初にやったのはsayoさん
+  // です。もっというとp5もこれ確かやってるはず
+  function parseCmdToText(cmd){
+    let result = "";
+    for(let i=0; i<cmd.length-1; i++){
+      const command = cmd[i];
+      const {x, y, x1, y1, x2, y2} = command;
+      switch(command.type){
+        case "M":
+          result += "M " + x.toFixed(3) + " " + y.toFixed(3) + " ";
+          break;
+        case "Q":
+          result += "Q " + x1.toFixed(3) + " " + y1.toFixed(3) + " " + x.toFixed(3) + " " + y.toFixed(3) + " ";
+          break;
+        case "L":
+          result += "L " + x.toFixed(3) + " " + y.toFixed(3) + " ";
+          break;
+        case "C":
+          result += "C " + x1.toFixed(3) + " " + y1.toFixed(3) + " " + x2.toFixed(3) + " " + y2.toFixed(3) + " " + x.toFixed(3) + " " + y.toFixed(3) + " ";
+          break;
+        case "Z":
+          result += "Z ";
+          break;
+      }
+    }
+    result += "Z";
+    return result;
+  }
+
+  // これVectaの配列であるcontourの配列であるcontoursが対象
+  // 何が言いたいかというと2次元想定なのです
+  // 汎用性を考えると厳しいがtextContoursならこれで充分
+  function getBoundingBoxOfContours(contours){
+
+    let _minX = Infinity;
+    let _minY = Infinity;
+    let _maxX = -Infinity;
+    let _maxY = -Infinity;
+
+    for(let contour of contours){
+      for(let p of contour){
+        _minX = Math.min(p.x, _minX);
+        _minY = Math.min(p.y, _minY);
+        _maxX = Math.max(p.x, _maxX);
+        _maxY = Math.max(p.y, _maxY);
+      }
+    }
+    return {x:_minX, y:_minY, w:_maxX-_minX, h:_maxY-_minY};
+  }
+
+  // こっちも2次元想定の内容ですね
+  // 要はzがすべて0なら汎用性はあるということ
+  function alignmentContours(contours, options = {}){
+    const {
+      position = {x:0,y:0}, alignV = "center", alignH = "center"
+    } = options;
+
+    const tb = getBoundingBoxOfContours(contours);
+
+    const factorW = (alignV === "left" ? 0 : (alignV === "right" ? 1 : 0.5));
+    const factorH = (alignH === "top" ? 0 : (alignH === "bottom" ? 1 : 0.5));
+    const deltaX = tb.x+ tb.w*factorW - position.x;
+    const deltaY = tb.y + tb.h*factorH - position.y;
+
+    for(const contour of contours){
+      for(const p of contour){
+        p.x -= deltaX;
+        p.y -= deltaY;
+      }
+    }
+  }
+
+  // fontはopentypeのparseでarrayBufferをparseした結果としてのfont objectであります。
+  // なおp5の場合はfontにfont.fontを入れればOKでやんす。
+  // ちなみにITALICとかはfont-familyの話です。こっちは関係ない！
+  function getTextContours(params = {}){
+    const {
+      font, targetText = "A", textScale = 320, position = {x:0,y:0},
+      alignV = "center", alignH = "center",
+      bezierDetail2 = 8, bezierDetail3 = 5, lineSegmentLengthRatio = 1/64,
+      minLengthRatio = 1/50, mergeThresholdRatio = 1e-9, showDetail = false
+    } = params;
+
+    // textやってみる？
+    const cmd = font.getPath(targetText, 0, 0, textScale).commands;
+    const cmdText = parseCmdToText(cmd);
+    const textContours = parseData({
+      data:cmdText,
+      bezierDetail2:bezierDetail2, bezierDetail3:bezierDetail3,
+      lineSegmentLength:lineSegmentLengthRatio*textScale
+    });
+
+    alignmentContours(textContours, {position, alignV, alignH});
+
+    // 1回でいいっぽいですね...1回にするか。
+    mergePointsAll(textContours, {
+      threshold:mergeThresholdRatio*textScale, closed:true, showDetail
+    });
+    evenlySpacingAll(textContours, {
+      minLength:minLengthRatio*textScale, closed:true
+    });
+
+    return textContours;
+  }
+
   applications.CameraController = CameraController;
   applications.WeightedVertice = WeightedVertice;
   applications.TransformTree = TransformTree;
@@ -5018,8 +5125,13 @@ const foxApplications = (function(){
   applications.quadBezierizeAll = quadBezierizeAll;
   applications.mergePoints = mergePoints;
   applications.mergePointsAll = mergePointsAll;
+  applications.getBoundingBoxOfContours = getBoundingBoxOfContours;
+  applications.alignmentContours = alignmentContours;
+
   applications.parseData = parseData;
+  applications.parseCmdToText = parseCmdToText;
   applications.getSVGContours = getSVGContours;
+  applications.getTextContours = getTextContours;
 
   return applications;
 })();
