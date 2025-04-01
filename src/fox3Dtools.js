@@ -4865,20 +4865,32 @@ const foxApplications = (function(){
 
   // 連続する点しか見ない簡易版です
   function mergePoints(points, options = {}){
-    const {threshold = 0.000001, closed = false} = options;
+    const {threshold = 0.000001, closed = false, showDetail = false} = options;
+
+    let middlePointCount = 0;
+    let tailPointCount = 0;
 
     for(let i = points.length-1; i >= 1; i--){
       const p = points[i];
       const q = points[i-1];
-      if (p.dist(q) < threshold){
+      const d = p.dist(q);
+      if (d < threshold){
+        middlePointCount++;
+        if(showDetail){ console.log(`middle merged: ${d}`); }
         points.splice(i,1);
       }
     }
     if (closed) {
       // 頭に戻る場合はそれも排除する
-      if (points[0].dist(points[points.length-1]) < threshold) {
+      const d = points[0].dist(points[points.length-1]);
+      if (d < threshold) {
+        tailPointCount++;
+        if(showDetail){ console.log(`tail merged: ${d}`); }
         points.pop();
       }
+    }
+    if(showDetail){
+      console.log(`middle: ${middlePointCount} merged | tail: ${tailPointCount} merged`);
     }
   }
 
@@ -4973,7 +4985,7 @@ const foxApplications = (function(){
     const {
       svgData = "M 0 0 L 1 0 L 1 1 L 0 1 Z", scaleFactor = 200,
       bezierDetail2 = 8, bezierDetail3 = 5, lineSegmentLengthRatio = 1/64,
-      minLengthRatio = 1/50, mergeThresholdRatio = 1e-9
+      minLengthRatio = 1/50, mergeThresholdRatio = 1e-9, showDetail = false
     } = params;
     const svgContours = parseData({
       data:svgData, parseScale:scaleFactor,
@@ -4981,9 +4993,9 @@ const foxApplications = (function(){
       lineSegmentLength:scaleFactor*lineSegmentLengthRatio
     });
 
-    mergePointsAll(svgContours, {threshold:scaleFactor*mergeThresholdRatio, closed:true});
+    mergePointsAll(svgContours, {threshold:scaleFactor*mergeThresholdRatio, closed:true, showDetail});
     evenlySpacingAll(svgContours, {minLength:scaleFactor*minLengthRatio, closed:true});
-    mergePointsAll(svgContours, {threshold:scaleFactor*mergeThresholdRatio, closed:true});
+    mergePointsAll(svgContours, {threshold:scaleFactor*mergeThresholdRatio, closed:true, showDetail});
     evenlySpacingAll(svgContours, {minLength:scaleFactor*minLengthRatio, closed:true});
 
     return svgContours;
