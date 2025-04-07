@@ -2706,7 +2706,7 @@ const fox3Dtools = (function(){
       if(v.magSq() < Number.EPSILON){
         return Vecta.create(0,0,1);
       }
-      if(v.x > 0){
+      if(Math.abs(v.x) > 0){
         return Vecta.create(v.y, -v.x, 0).normalize();
       }
       return Vecta.create(0, v.z, -v.y).normalize();
