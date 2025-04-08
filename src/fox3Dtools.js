@@ -845,6 +845,15 @@ const foxUtils = (function(){
       }
       return this.elapsedStump;
     }
+    getElapsedDiscrete(divisor = 1, modulo = 1){
+      const elapsedCount = this.getElapsed();
+      const n = Math.floor(elapsedCount/divisor);
+      // moduloが1の場合は単純にdivisorで割った商を返す。moduloが2以上の場合は余りを取る。
+      if(modulo > 1){
+        return n % modulo;
+      }
+      return n;
+    }
     getProgress(){
       return this.getElapsed()/this.duration;
     }
