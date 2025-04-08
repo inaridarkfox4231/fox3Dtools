@@ -3694,6 +3694,14 @@ const fox3Dtools = (function(){
       this.setView();
       return this;
     }
+    moveNDC(dx, dy){
+      // dx, dyはNDCベースの変位. centerをその分だけ平行移動して、lookAtで一致させる。
+      const centerNDC = this.getNDCFromGlobal(this.center);
+      centerNDC.add(dx, dy, 0);
+      const newCenter = this.getGlobalFromNDC(centerNDC.x, centerNDC.y, this.center);
+      this.lookAt(newCenter);
+      return this;
+    }
     zoom(ratio, centerFixed = true){
       // ratioは正の数。これで割る。距離を。たとえば2倍拡大なら2で割る。
       // ビューの軸やクォータニオンの変化はありません。
