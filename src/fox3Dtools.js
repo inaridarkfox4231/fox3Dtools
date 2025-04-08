@@ -3526,8 +3526,8 @@ const fox3Dtools = (function(){
       } = params;
       this.eye.set(eye);
       this.center.set(center);
-      const topVector = Vecta.create(top);
-      this.setAxesFromParam(topVector);
+      const topAxis = Vecta.create(top);
+      this.setAxesFromParam(topAxis);
       this.setQuarternionFromAxes();
       this.setView();
       // fovとかパラメータで設定できるようにもする。継承で。
@@ -3552,11 +3552,11 @@ const fox3Dtools = (function(){
     getQuarternion(){
       return this.q;
     }
-    setAxesFromParam(topVector){
+    setAxesFromParam(topAxis){
       // frontはeyeからcenterを引いたのち正規化する
       this.front.set(this.eye).sub(this.center).normalize();
       // 引数のベクトルは「上」を定めるもの。
-      this.side.set(topVector).cross(this.front).normalize(); // これでいいと思う。
+      this.side.set(topAxis).cross(this.front).normalize(); // これでいいと思う。
       this.up.set(this.front).cross(this.side); // これでいいですね。
       // front,side,upがz,x,yに当たる。
       // crossのnon-immutableも使いどころあるじゃん。
@@ -4156,16 +4156,17 @@ const foxApplications = (function(){
 
   // isActiveを追加。カメラが動いてるときだけ更新するなどの用途がある。
   // configも追加。操作性をいじるための機能。actionCoeffを変更できる。デフォルトは1. thresholdも0.01とかでいいかもだしな。
+  // moveはmoveNDCでないとまずいでしょう
   class CameraController extends Interaction{
     constructor(canvas, options = {}, params = {}){
       super(canvas, options);
       const {cam} = params;
       this.mouseScaleFactor = 0.0001;
       this.mouseRotationFactor = 0.001;
-      this.mouseTranslationFactor = 0.003;
+      this.mouseTranslationFactor = 0.0008;
       this.touchScaleFactor = 0.00025;
       this.touchRotationFactor = 0.001;
-      this.touchTranslationFactor = 0.0028;
+      this.touchTranslationFactor = 0.00085;
       this.topAxis = new Vecta(0,1,0);
       this.upperBound = 0.01;
       this.lowerBound = 0.01;
@@ -4195,7 +4196,8 @@ const foxApplications = (function(){
         }
         const tx = t.getValue("translationX");
         const ty = t.getValue("translationY");
-        this.cam.move(-tx, ty, 0);
+        //this.cam.move(-tx, ty, 0);
+        this.cam.moveNDC(-tx, ty);
       });
     }
     axisRotation(rx, ry){
