@@ -1678,6 +1678,7 @@ const foxIA = (function(){
   // pointersが空の場合は処理を実行しない。これにより、factoryで分岐処理を用意することで、ポインターの生成が実行されないようにできる。
   class Interaction{
     constructor(canvas, options = {}){
+      this.canvas = canvas; // なんか知らないけど持たせてもいいんじゃないの？
       this.pointers = [];
       this.factory = ((t) => new PointerPrototype());
       // leftとtopがwindowのサイズ変更に対応するために必要
@@ -1757,7 +1758,9 @@ const foxIA = (function(){
       return this.rect;
     }
     updateCanvasData(){
-      const newRect = canvas.getBoundingClientRect();
+      // これでいいはず。おかしいと思ったわ。いいんかな...いいんかな？
+      // 多分今までおとがめなしだけだっただけだと思う。
+      const newRect = this.canvas.getBoundingClientRect();
       // 対象のキャンバスを更新
       const {width, height, left, top} = newRect;
       this.rect = {width, height, left, top};
