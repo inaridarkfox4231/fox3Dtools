@@ -927,10 +927,14 @@ const foxUtils = (function(){
   // Clockを対象とする形で一般化したい
   class Schedule{
     constructor(params = {}){
+      this.buildStatus(params);
+    }
+    buildStatus(params = {}){
       const {
         durations = [], actions = [], callbacks = [], loopers = [],
         clockParams = {}
       } = params;
+
       this.clock = this.clockFactory(clockParams);
 
       this.durations = durations.slice(); // 複製する。これの長さが基準となる。
@@ -938,7 +942,17 @@ const foxUtils = (function(){
 
       this.currentIndex = 0; // index制御にする
 
+      // loopCountは別で管理する
+      this.loopCounts = new Array(L);
+      this.loopCounts.fill(0);
+
+      // setup.
+      this.isFinished = true;
+      this.isPause = true;
+
       this.status = new Array(L);
+
+      if(durations.length === 0) return; // あとから決める場合はここで切る
 
       // fillをobjectで使うと全部一緒になってしまうので注意
       for(let i=0; i<L; i++){
@@ -965,14 +979,6 @@ const foxUtils = (function(){
       setStatus("action", actions, L, Schedule.nullFunction);
       setStatus("callback", callbacks, L, Schedule.nullFunction);
       setStatus("looper", loopers, L, {back:0, forward:0, count:1});
-
-      // loopCountは別で管理する
-      this.loopCounts = new Array(L);
-      this.loopCounts.fill(0);
-
-      // ひとつでいいや
-      this.isFinished = true;
-      this.isPause = true;
     }
     clockFactory(params = {}){
       return new Clock(params);
