@@ -5156,29 +5156,78 @@ const foxApplications = (function(){
       font, targetText = "A", textScale = 320, position = {x:0,y:0},
       alignV = "center", alignH = "center",
       bezierDetail2 = 8, bezierDetail3 = 5, lineSegmentLengthRatio = 1/64,
-      minLengthRatio = 1/50, mergeThresholdRatio = 1e-9, showDetail = false
+      minLengthRatio = 1/50, mergeThresholdRatio = 1e-9, showDetail = false,
+      separateLetter = false, separateLine = false, textLeadingRatio = 1.25
     } = params;
 
-    // textやってみる？
-    const cmd = font.getPath(targetText, 0, 0, textScale).commands;
-    const cmdText = parseCmdToText(cmd);
-    const textContours = parseData({
-      data:cmdText,
-      bezierDetail2:bezierDetail2, bezierDetail3:bezierDetail3,
-      lineSegmentLength:lineSegmentLengthRatio*textScale
-    });
+    // ここをgetPathにするかgetPathsにするかという話。
+    // さらに行ごとに場合も考える必要がある。
+    // アイデアとしてはalignmentContoursは最初"left","top"で実行し
+    // textLeadingに従って左上詰めで用意したうえで全体のcontoursまでもっていき
+    // 以降は指定されたalignV,alignHでいじればいいんじゃないかと思う。
 
-    alignmentContours(textContours, {position, alignV, alignH});
+    const texts = targetText.split("\n");
+    // 一応、中身がない場合。
+    if(texts.length === 0){ return [[]]; }
 
-    // 1回でいいっぽいですね...1回にするか。
-    mergePointsAll(textContours, {
+    // 全部Pathsでやればすべてに対応できる。それでいいだろ。
+    const textContoursLines = [];
+    for(let i=0; i<texts.length; i++){
+      const paths = font.getPaths(texts[i], 0, 0, textScale);
+      const textContoursLetters = [];
+      for(let k=0; k<paths.length; k++){
+        const cmd = paths[k].commands;
+        const cmdText = parseCmdToText(cmd);
+        const letterContours = parseData({
+          data:cmdText,
+          bezierDetail2:bezierDetail2, bezierDetail3:bezierDetail3,
+          lineSegmentLength:lineSegmentLengthRatio*textScale
+        });
+        textContoursLetters.push(letterContours);
+      }
+      textContoursLines.push(textContoursLetters);
+    }
+    // lineごとにcontourの集合にまとめる
+    const contoursLines = new Array(texts.length);
+    for(let i=0; i<texts.length; i++){
+      contoursLines[i] = textContoursLines[i].flat();
+      alignmentContours(contoursLines[i], {position:{x:0,y:0}, alignV:"left", alignH:"top"});
+    }
+    // textReadingRatioを計算してアラインメントする
+    let currentYOffset = 0;
+    for(let i=0; i<texts.length; i++){
+      const ctrs = contoursLines[i];
+      alignmentContours(ctrs, {position:{x:0, y:currentYOffset}, alignV:"left", alignH:"top"});
+      const bd = getBoundingBoxOfContours(ctrs);
+      currentYOffset += bd.h * textLeadingRatio;
+    }
+    // 全体のflatをする。以降は従来の処理。
+    const allContours = contoursLines.flat();
+
+    alignmentContours(allContours, {position, alignV, alignH});
+
+    mergePointsAll(allContours, {
       threshold:mergeThresholdRatio*textScale, closed:true, showDetail
     });
-    evenlySpacingAll(textContours, {
+    evenlySpacingAll(allContours, {
       minLength:minLengthRatio*textScale, closed:true, showDetail
     });
 
-    return textContours;
+    if(separateLetter && separateLine){
+      // 行ごとに、文字ごとに分かれたcontoursが入っている。一番ネストが深い。
+      return textContoursLines;
+    }
+    if(separateLetter && !separateLine){
+      // 文字ごとバラバラで返る。行については分かれてない。
+      return textContoursLines.flat();
+    }
+    if(!separateLetter && separateLine){
+      // 行ごとに分かれているが行ごとにcontour配列になっており文字ごとにはなってない
+      return contoursLines;
+    }
+
+    // で、両方falseのケース
+    return allContours;
   }
 
   applications.CameraController = CameraController;
