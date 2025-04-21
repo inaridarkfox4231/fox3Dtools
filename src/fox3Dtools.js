@@ -940,7 +940,7 @@ const foxUtils = (function(){
       this.durations = durations.slice(); // 複製する。これの長さが基準となる。
       const L = this.durations.length; // 全体の長さ
 
-      this.currentIndex = 0; // index制御にする
+      this.currentIndex = L; // initialize前のデフォルトはLの方がいいだろう
 
       // loopCountは別で管理する
       this.loopCounts = new Array(L);
@@ -1060,6 +1060,11 @@ const foxUtils = (function(){
       if(!this.isPause)return;
       this.clock.start();
       this.isPause = false;
+    }
+    getIndex(){
+      // 詳細なシーケンス制御のためにはインデックス単位での管理が必須
+      // たとえば長さが4の場合これが4であることでシーケンスが終わっていることを表現できる
+      return this.currentIndex;
     }
   }
 
