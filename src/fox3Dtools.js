@@ -5169,6 +5169,16 @@ const foxApplications = (function(){
     const texts = targetText.split("\n");
     // 一応、中身がない場合。
     if(texts.length === 0){ return [[]]; }
+    const indents = new Array(texts.length);
+    indents.fill(0);
+    for(let i=0; i<texts.length; i++){
+      const eachText = texts[i];
+      for(let k=0; k<eachText.length; k++){
+        if(eachText[k] === ' '){ indents[i] += textScale*0.5; }
+        else if(eachText[k] === '　'){ indents[i] += textScale; }
+        else{ break; }
+      }
+    }
 
     // 全部Pathsでやればすべてに対応できる。それでいいだろ。
     const textContoursLines = [];
@@ -5178,6 +5188,10 @@ const foxApplications = (function(){
       for(let k=0; k<paths.length; k++){
         const cmd = paths[k].commands;
         const cmdText = parseCmdToText(cmd);
+        // スペースの場合...parseDataをいじってもいいだろうが、
+        // 多分無視するのが一番いい
+        // getPathsはスペースも含めて位置を調整してくれるのでそこは問題ない
+        if(cmdText==="Z") continue;
         const letterContours = parseData({
           data:cmdText,
           bezierDetail2:bezierDetail2, bezierDetail3:bezierDetail3,
@@ -5197,8 +5211,16 @@ const foxApplications = (function(){
     let currentYOffset = 0;
     for(let i=0; i<texts.length; i++){
       const ctrs = contoursLines[i];
-      alignmentContours(ctrs, {position:{x:0, y:currentYOffset}, alignV:"left", alignH:"top"});
+      // からっぽのときは...
+      if(ctrs.length === 0){
+        // textScaleを暫定的なbd.hとみなし、それを使うことにする。
+        currentYOffset += textScale * textLeadingRatio;
+        continue;
+      }
+      // indentを反映させる
+      alignmentContours(ctrs, {position:{x:indents[i], y:currentYOffset}, alignV:"left", alignH:"top"});
       const bd = getBoundingBoxOfContours(ctrs);
+
       currentYOffset += bd.h * textLeadingRatio;
     }
     // 全体のflatをする。以降は従来の処理。
