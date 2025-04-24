@@ -335,6 +335,9 @@ const foxUtils = (function(){
     reset(){
       this.index = 0;
     }
+    getIndex(){
+      return this.index;
+    }
   }
 
   // RandomChoiceArray.
@@ -383,6 +386,9 @@ const foxUtils = (function(){
     }
     reset(){
       this.index = 0;
+    }
+    getIndex(){
+      return this.index;
     }
   }
 
