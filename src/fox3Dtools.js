@@ -307,7 +307,7 @@ const foxUtils = (function(){
       super();
       const args = [...arguments];
       if(Array.isArray(args[0])){
-        this.push(...args);
+        this.push(...args[0]);
       }else{
         for(let i=0; i<args.length; i++){
           this.push(args[i]);
