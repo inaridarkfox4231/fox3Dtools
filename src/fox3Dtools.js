@@ -335,9 +335,6 @@ const foxUtils = (function(){
     reset(){
       this.index = 0;
     }
-    getIndex(){
-      return this.index;
-    }
   }
 
   // RandomChoiceArray.
@@ -386,9 +383,6 @@ const foxUtils = (function(){
     }
     reset(){
       this.index = 0;
-    }
-    getIndex(){
-      return this.index;
     }
   }
 
@@ -4587,6 +4581,7 @@ const foxApplications = (function(){
 
       this.TRSset = {};
       this.currentTRS = null;
+      this.currentTRSName = ""; // 無いと不便
 
       this.scaleFlag = false; // スタイラスペンでもスケールをいじれるようにする
       this.translationFlag = false; // spaceキー（
@@ -4641,15 +4636,20 @@ const foxApplications = (function(){
     registTRS(name, trs){
       this.TRSset[name] = trs;
       this.currentTRS = trs;
+      this.currentTRSName = name;
       return this;
     }
     setTRS(name){
       this.currentTRS = this.TRSset[name];
+      this.currentTRSName = name;
       this.dmp.applyAll("reset");
       return this;
     }
     getTRS(name){
       return this.TRSset[name];
+    }
+    getCurrentTRSName(){
+      return this.currentTRSName;
     }
     convert(){
       // あったら便利かもしれない。
