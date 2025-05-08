@@ -1741,8 +1741,6 @@ const foxIA = (function(){
 
       // リサイズの際にleftとtopが変更されるのでそれに伴ってleftとtopを更新する
       window.addEventListener('resize', (function(){
-
-        //this.updateCanvasData(newRect.left, newRect.top);
         this.updateCanvasData();
       }).bind(this));
       window.addEventListener('scroll', (function(){
